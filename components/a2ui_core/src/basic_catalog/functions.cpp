@@ -121,39 +121,52 @@ Result<Json> fn_open_url(const Json& args, FunctionContext& ctx) {
 locale::NumberOptions number_options(const Json& args) {
   locale::NumberOptions o;
   if (args["decimals"].is_number()) o.decimals = static_cast<int>(args["decimals"].as_number());
-  if (args["grouping"].is_bool()) o.grouping = args["grouping"].as_bool();
+  if (!args["grouping"].is_nullish()) {
+    o.grouping = coerce_bool(args["grouping"]);
+    o.locale_min_grouping = false;  // Intl: an explicit grouping means "always".
+  }
   return o;
 }
 
+// Formatting failures render as "" in every reference SDK (see locale.h).
+Json text_or_empty(const Result<std::string>& r) { return Json(r.ok() ? r.value() : std::string()); }
+
 Result<Json> fn_format_number(const Json& args, FunctionContext&) {
-  auto r = locale::format_number(coerce_number(args["value"]), number_options(args),
-                                 args["locale"].as_string());
-  if (!r.ok()) return r.take_error();
-  return Json(r.value());
+  if (args["value"].is_nullish()) return Json("");
+  return text_or_empty(locale::format_number(coerce_number(args["value"]), number_options(args),
+                                             args["locale"].as_string()));
 }
 
 Result<Json> fn_format_currency(const Json& args, FunctionContext&) {
-  auto r = locale::format_currency(coerce_number(args["value"]), args["currency"].as_string(),
-                                   number_options(args), args["locale"].as_string());
-  if (!r.ok()) return r.take_error();
-  return Json(r.value());
+  if (args["value"].is_nullish()) return Json("");
+  return text_or_empty(locale::format_currency(coerce_number(args["value"]),
+                                               args["currency"].as_string(), number_options(args),
+                                               args["locale"].as_string()));
 }
 
 Result<Json> fn_format_date(const Json& args, FunctionContext&) {
   const Json& v = args["value"];
+  if (v.is_nullish()) return Json("");
   const std::string fmt = args["format"].as_string();
-  auto r = v.is_number() ? locale::format_date_millis(v.as_number(), fmt, args["locale"].as_string())
-                         : locale::format_date(coerce_string(v), fmt, args["locale"].as_string());
-  if (!r.ok()) return r.take_error();
-  return Json(r.value());
+  return text_or_empty(v.is_number()
+                           ? locale::format_date_millis(v.as_number(), fmt, args["locale"].as_string())
+                           : locale::format_date(coerce_string(v), fmt, args["locale"].as_string()));
 }
 
 Result<Json> fn_pluralize(const Json& args, FunctionContext&) {
-  const char* cat = locale::plural_category(coerce_number(args["value"]), args["locale"].as_string());
-  const Json* chosen = args.find(cat);
-  if (!chosen || chosen->is_nullish()) chosen = args.find("other");
-  if (!chosen) return expression_error("pluralize requires an 'other' string");
-  return Json(coerce_string(*chosen));
+  static const struct {
+    const char* key;
+    unsigned bit;
+  } kForms[] = {{"zero", locale::kPluralZero}, {"one", locale::kPluralOne},
+                {"two", locale::kPluralTwo},   {"few", locale::kPluralFew},
+                {"many", locale::kPluralMany}, {"other", locale::kPluralOther}};
+  unsigned present = 0;
+  for (const auto& f : kForms) {
+    if (!args[f.key].is_nullish()) present |= f.bit;
+  }
+  const char* key = locale::pluralize_key(coerce_number(args["value"]), present,
+                                          args["locale"].as_string());
+  return Json(coerce_string(args[key]));
 }
 
 /** Converts a version-neutral template part into a v1.0 dynamic value. */
