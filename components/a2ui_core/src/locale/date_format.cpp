@@ -178,11 +178,13 @@ bool parse_iso(std::string_view text, DateTime* out) {
 // Formatting
 
 void append_padded(std::string& out, int64_t value, int width) {
-  char buf[32];
+  char buf[48];
   if (value < 0) {
     out.push_back('-');
     value = -value;
   }
+  if (width < 1) width = 1;
+  if (width > 20) width = 20;  // Bounded so the buffer always fits.
   std::snprintf(buf, sizeof buf, "%0*lld", width, static_cast<long long>(value));
   out += buf;
 }
@@ -195,7 +197,7 @@ std::string iso_string(const DateTime& utc) {
     out.push_back(utc.year < 0 ? '-' : '+');
     append_padded(out, utc.year < 0 ? -utc.year : utc.year, 6);
   }
-  char buf[40];
+  char buf[96];  // Worst case GCC assumes for six ints; keeps -Wformat-truncation quiet.
   std::snprintf(buf, sizeof buf, "-%02d-%02dT%02d:%02d:%02d.%03dZ", utc.month, utc.day, utc.hour,
                 utc.minute, utc.second, utc.millis);
   return out + buf;
@@ -300,8 +302,8 @@ bool expand_field(std::string& out, char c, int n, const DateTime& t, const Loca
       append_padded(out, t.second, n);
       return true;
     case 'S': {
-      char buf[4];
-      std::snprintf(buf, sizeof buf, "%03d", t.millis);
+      char buf[16];
+      std::snprintf(buf, sizeof buf, "%03d", t.millis % 1000);
       for (int i = 0; i < n; ++i) out.push_back(i < 3 ? buf[i] : '0');
       return true;
     }

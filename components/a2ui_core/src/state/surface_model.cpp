@@ -59,7 +59,9 @@ std::string iso8601_utc(double seconds) {
 #else
   gmtime_r(&t, &tm);
 #endif
-  char buf[40];
+  // Sized for the worst case GCC assumes (every int field at 11 chars), so
+  // -Wformat-truncation stays quiet on the ESP-IDF toolchains.
+  char buf[96];
   std::snprintf(buf, sizeof buf, "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", tm.tm_year + 1900, tm.tm_mon + 1,
                 tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, ms);
   return buf;

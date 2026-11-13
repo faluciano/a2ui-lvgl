@@ -19,7 +19,7 @@ UPSTREAM := third_party/a2ui
 
 SAN ?= -fsanitize=address,undefined -fno-sanitize=vptr -fno-omit-frame-pointer
 OPT ?= -O1 -g
-WARN := -Wall -Wextra -Wno-unused-parameter
+WARN := -Wall -Wextra -Wno-unused-parameter -Wformat=2 -Wformat-truncation=2 -Wformat-overflow=2
 
 LIB_CXXFLAGS := -std=c++17 $(OPT) $(WARN) $(SAN) -fno-exceptions -fno-rtti \
 	-Icomponents/a2ui_core/include
