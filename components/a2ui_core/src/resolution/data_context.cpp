@@ -17,7 +17,7 @@ Error not_found(const std::string& name) {
 }
 Error caller_disallowed(const std::string& name) {
   return make_error(ErrorKind::Expression,
-                    "Function '" + name + "' cannot be called by the renderer (allowedCallers is agentOnly)",
+                    "Function '" + name + "' cannot be called by renderer (allowedCallers is agentOnly).",
                     "CALLER_NOT_ALLOWED");
 }
 Error user_activation_required(const std::string& name) {
@@ -270,6 +270,10 @@ Json DataContext::evaluate_call(const std::string& name, const Json& call) {
   const Catalog* cat = catalog.value();
   const FunctionDecl* decl = cat->find_function(name);
 
+  if (decl && decl->api.allowed_callers == AllowedCallers::AgentOnly) {
+    fail(function_errors::caller_disallowed(name), name);
+    return nullptr;
+  }
   if (!decl || !decl->has_local_impl()) {
     if (host_->routes_to_agent()) return route_to_agent(name, decl, cat->id(), call);
     fail(function_errors::not_found(name), name);

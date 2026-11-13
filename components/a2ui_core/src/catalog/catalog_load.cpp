@@ -13,6 +13,7 @@
 
 #include "a2ui/catalog.h"
 #include "a2ui/identifier.h"
+#include "a2ui/metadata.h"
 #include "a2ui/schema.h"
 #include "a2ui/spec_documents.h"
 #include "catalog_internal.h"
@@ -89,6 +90,204 @@ Json make_union(const std::vector<std::string>& names, std::string_view prefix, 
   return u;
 }
 
+
+namespace {
+
+bool ends_with(const std::string& s, std::string_view suffix) {
+  return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool is_single_child_schema(const Json& s) {
+  if (!s.is_object()) return false;
+  if (const Json& r = s["$ref"]; r.is_string() && (ends_with(r.as_string(), "/ComponentId") ||
+                                                    ends_with(r.as_string(), "/Child"))) {
+    return true;
+  }
+  for (const char* kw : {"allOf", "oneOf", "anyOf"}) {
+    for (const auto& sub : s[kw].as_array()) {
+      if (is_single_child_schema(sub)) return true;
+    }
+  }
+  return false;
+}
+
+bool is_child_list_schema(const Json& s) {
+  if (!s.is_object()) return false;
+  if (const Json& r = s["$ref"]; r.is_string() && ends_with(r.as_string(), "/ChildList")) return true;
+  for (const char* kw : {"allOf", "oneOf", "anyOf"}) {
+    for (const auto& sub : s[kw].as_array()) {
+      if (is_child_list_schema(sub)) return true;
+    }
+  }
+  const Json& props = s["properties"];
+  if (props.is_object()) {
+    if (props.contains("explicitList") || props.contains("template")) return true;
+    if (props.contains("componentId") && (props.contains("path") || props.contains("dataBinding"))) return true;
+  }
+  return false;
+}
+
+const Json* resolve_local_ref(const Json& ref, const Json& local, const Json& catalog_doc) {
+  if (!ref.is_string()) return nullptr;
+  const std::string& r = ref.as_string();
+  if (r.rfind("#/", 0) != 0) return nullptr;
+  const std::string_view ptr = std::string_view(r).substr(1);
+  if (ptr.rfind("/$defs/", 0) == 0) {
+    if (const Json* t = resolve_json_pointer(local, ptr); t && t->is_object()) return t;
+  }
+  if (const Json* t = resolve_json_pointer(catalog_doc, ptr); t && t->is_object()) return t;
+  return nullptr;
+}
+
+void add_unique(std::vector<std::string>* v, const std::string& s) {
+  if (std::find(v->begin(), v->end(), s) == v->end()) v->push_back(s);
+}
+
+void inspect_child_schema(const Json& sub, const Json& root, const Json& catalog_doc, int depth,
+                          ComponentApi::ChildRefs* out) {
+  if (!sub.is_object() || depth > 8) return;
+  for (const char* kw : {"allOf", "anyOf", "oneOf"}) {
+    for (const auto& branch : sub[kw].as_array()) inspect_child_schema(branch, root, catalog_doc, depth + 1, out);
+  }
+  if (const Json* t = resolve_local_ref(sub["$ref"], root, catalog_doc)) {
+    inspect_child_schema(*t, root, catalog_doc, depth + 1, out);
+  }
+  for (const auto& m : sub["properties"].as_object()) {
+    const std::string& name = m.first;
+    if (name == "id" || name == "component") continue;
+    const Json& ps = m.second;
+    if (is_single_child_schema(ps)) {
+      add_unique(&out->single, name);
+      continue;
+    }
+    if (is_child_list_schema(ps)) {
+      add_unique(&out->list, name);
+      continue;
+    }
+    const Json* target = &ps;
+    if (const Json* t = resolve_local_ref(ps["$ref"], root, catalog_doc)) target = t;
+    if (!target->is_object()) continue;
+    const bool is_array = ((*target)["type"].is_string() && (*target)["type"].as_string() == "array") ||
+                          target->contains("items");
+    if (!is_array) continue;
+    const Json* items = target->find("items");
+    if (!items || !items->is_object()) continue;
+    if (is_single_child_schema(*items) || is_child_list_schema(*items)) {
+      add_unique(&out->list, name);
+      continue;
+    }
+    if (const Json* t = resolve_local_ref((*items)["$ref"], root, catalog_doc)) items = t;
+    if (is_single_child_schema(*items) || is_child_list_schema(*items)) {
+      add_unique(&out->list, name);
+      continue;
+    }
+    for (const auto& sk : (*items)["properties"].as_object()) {
+      if (is_single_child_schema(sk.second) || is_child_list_schema(sk.second)) {
+        add_unique(&out->list, name);
+        add_unique(&out->nested[name], sk.first);
+      }
+    }
+  }
+}
+
+}  // namespace
+
+ComponentApi::ChildRefs analyze_child_refs(const Json& schema, const Json& catalog_doc) {
+  ComponentApi::ChildRefs out;
+  inspect_child_schema(schema, schema, catalog_doc, 0, &out);
+  return out;
+}
+
+
+namespace {
+
+bool ref_ends(const Json& ref, std::string_view suffix) {
+  return ref.is_string() && ends_with(ref.as_string(), suffix);
+}
+
+bool is_standard_mixin_property(const std::string& name, const Json& ps, bool has_inline_id) {
+  if (!ps.is_object()) return false;
+  const Json& ref = ps["$ref"];
+  if (name == "accessibility") return ref_ends(ref, "/AccessibilityAttributes");
+  if (name == "checks") {
+    if (ref_ends(ref, "/Checkable")) return true;
+    return ps["items"].is_object() && ref_ends(ps["items"]["$ref"], "/CheckRule");
+  }
+  if (name == "metadata") {
+    if (ref_ends(ref, "/ComponentCommonMetadata")) return true;
+    const Json& props = ps["properties"];
+    return has_inline_id && ps["type"].is_string() && ps["type"].as_string() == "object" && props.is_object() &&
+           props.size() == 1 && props.contains("extensions");
+  }
+  if (name == "catalogId") return has_inline_id && ps["type"].is_string() && ps["type"].as_string() == "string";
+  return false;
+}
+
+std::string local_def_name(const Json& ref) {
+  if (!ref.is_string()) return {};
+  const std::string& r = ref.as_string();
+  const size_t at = r.find("#/$defs/");
+  if (at == std::string::npos) return {};
+  if (at != 0 && r.compare(0, at, "catalog.json") != 0) return {};
+  std::string name = r.substr(at + 8);
+  return name.substr(0, name.find('/'));
+}
+
+void declared_blocks(const Json& schema, const Json& defs, std::vector<std::string>* visited, int depth,
+                     std::vector<const Json*>* out) {
+  if (!schema.is_object() || depth > 12) return;
+  if (schema["properties"].is_object()) out->push_back(&schema["properties"]);
+  const std::string def = local_def_name(schema["$ref"]);
+  if (!def.empty() && def != "ComponentCommon" && def != "Checkable" && defs.contains(def) &&
+      std::find(visited->begin(), visited->end(), def) == visited->end()) {
+    visited->push_back(def);
+    declared_blocks(defs[def], defs, visited, depth + 1, out);
+  }
+  for (const char* kw : {"allOf", "anyOf", "oneOf"}) {
+    for (const auto& b : schema[kw].as_array()) declared_blocks(b, defs, visited, depth + 1, out);
+  }
+}
+
+bool references_checkable(const Json& schema, const Json& defs, std::vector<std::string>* visited, int depth) {
+  if (!schema.is_object() || depth > 12) return false;
+  const Json& ref = schema["$ref"];
+  if (ref_ends(ref, "/Checkable")) return true;
+  const std::string def = local_def_name(ref);
+  if (!def.empty() && defs.contains(def) && std::find(visited->begin(), visited->end(), def) == visited->end()) {
+    visited->push_back(def);
+    if (references_checkable(defs[def], defs, visited, depth + 1)) return true;
+  }
+  const Json& props = schema["properties"];
+  if (props.is_object()) {
+    if (props.contains("@checks")) return true;
+    if (props.contains("checks") && is_standard_mixin_property("checks", props["checks"], false)) return true;
+  }
+  for (const auto& sub : schema["allOf"].as_array()) {
+    if (references_checkable(sub, defs, visited, depth + 1)) return true;
+  }
+  return false;
+}
+
+}  // namespace
+
+void analyze_envelope(const Json& schema, const Json& catalog_doc, ComponentApi* api) {
+  const Json& defs = catalog_doc["$defs"];
+  std::vector<std::string> visited;
+  std::vector<const Json*> blocks;
+  declared_blocks(schema, defs, &visited, 0, &blocks);
+  api->custom_envelope_properties.clear();
+  for (const Json* props : blocks) {
+    const bool inline_id = props->contains("id");
+    for (const char* key : {"metadata", "catalogId", "accessibility", "checks"}) {
+      if (props->contains(key) && !is_standard_mixin_property(key, (*props)[key], inline_id)) {
+        add_unique(&api->custom_envelope_properties, key);
+      }
+    }
+  }
+  visited.clear();
+  api->checkable = references_checkable(schema, defs, &visited, 0);
+}
+
 }  // namespace catalog_internal
 
 namespace {
@@ -136,32 +335,6 @@ Status check_v10_external_refs(const Json& node, std::string& pointer, int depth
       Status s = check_v10_external_refs(node[i], pointer, depth + 1);
       pointer.resize(mark);
       if (!s.ok()) return s;
-    }
-  }
-  return ok_status();
-}
-
-// ComponentDefinition.metadata / ComponentCommon.@metadata: only
-// `extensions`, whose keys are UAX #31 identifiers.
-Status validate_metadata(const Json& metadata, const std::string& context) {
-  if (!metadata.is_object()) {
-    return make_error(ErrorKind::Validation,
-                      "Expected " + context + " to be an object, got " + metadata.dump());
-  }
-  for (const auto& m : metadata.as_object()) {
-    if (m.first != "extensions") {
-      return make_error(ErrorKind::Validation, "Unexpected property '" + m.first + "' in " +
-                                                   context + "; only 'extensions' is allowed.");
-    }
-    if (!m.second.is_object()) {
-      return make_error(ErrorKind::Validation,
-                        "Expected " + context + ".extensions to be an object.");
-    }
-    for (const auto& e : m.second.as_object()) {
-      if (!is_uax31_identifier(e.first)) {
-        return make_error(ErrorKind::Validation, "Invalid UAX #31 extension identifier '" +
-                                                     e.first + "' in " + context + ".extensions.");
-      }
     }
   }
   return ok_status();
@@ -261,7 +434,16 @@ const Json* follow_ref(const ClassifyCtx& ctx, const std::string& ref, bool* in_
     return ctx.common ? resolve_json_pointer(*ctx.common, ptr) : nullptr;
   }
   *in_common = false;
-  if (ptr.rfind("/$defs/", 0) == 0) return resolve_json_pointer(ctx.catalog_defs, ptr.substr(6));
+  if (ptr.rfind("/$defs/", 0) == 0) {
+    if (const Json* local = resolve_json_pointer(ctx.catalog_defs, ptr.substr(6))) return local;
+    // A local name the catalog does not define is the common type of that name.
+    *in_common = true;
+    if (common_def) {
+      const size_t end = ptr.find('/', 7);
+      *common_def = std::string(ptr.substr(7, end == std::string_view::npos ? std::string_view::npos : end - 7));
+    }
+    return ctx.common ? resolve_json_pointer(*ctx.common, ptr) : nullptr;
+  }
   return nullptr;
 }
 
@@ -397,6 +579,10 @@ Result<CatalogPtr> Catalog::from_json(const Json& document, std::string_view cat
     }
     A2UI_RETURN_IF_ERROR(check_property_identifiers(m.second, name, 0));
     if (const Json* md = m.second.find("metadata")) {
+      if (!md->is_object()) {
+        return make_error(ErrorKind::Validation, "Expected component '" + name +
+                                                     "' metadata to be an object, got " + md->dump());
+      }
       A2UI_RETURN_IF_ERROR(validate_metadata(*md, "component '" + name + "' metadata"));
     }
   }
@@ -512,6 +698,8 @@ Result<CatalogPtr> Catalog::from_json(const Json& document, std::string_view cat
         api.allowed_children = std::move(v);
       }
       if (const Json* md = api.schema.find("metadata")) api.metadata = *md;
+      api.child_refs = catalog_internal::analyze_child_refs(api.schema, src);
+      catalog_internal::analyze_envelope(api.schema, src, &api);
       catalog->components_.push_back(std::move(api));
     }
     members = std::move(kept);

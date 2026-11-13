@@ -110,6 +110,41 @@ struct ComponentApi {  // [core]
   /** ComponentDefinition.metadata (v1.0); undefined when the definition has none. */
   Json metadata;
 
+  /**
+   * Where the component references other components, read from schema
+   * `$ref`s ending in /ComponentId, /Child or /ChildList (the reference
+   * map of the other SDKs). Filled by Catalog::from_json and
+   * Catalog::add_component.
+   */
+  struct ChildRefs {
+    /** Properties holding one component id. */
+    std::vector<std::string> single;
+    /** Properties holding a ChildList (id array or template). */
+    std::vector<std::string> list;
+    /** Array properties whose items are objects with child slots (Tabs.tabs[].child). */
+    std::map<std::string, std::vector<std::string>> nested;
+    bool empty() const { return single.empty() && list.empty(); }
+  };
+  ChildRefs child_refs;
+
+  /**
+   * Which of the bare envelope names (metadata, catalogId, accessibility,
+   * checks) the component declares as properties of its own rather than as
+   * the standard ComponentCommon / Checkable mixin (any allOf/anyOf/oneOf
+   * branch counts). On a v1.0 surface a bare key that is not listed here is
+   * the legacy spelling of its `@` envelope key.
+   */
+  std::vector<std::string> custom_envelope_properties;
+  /** Whether the component composes Checkable (accepts `@checks`). */
+  bool checkable = false;
+
+  bool declares_custom(std::string_view bare_key) const {
+    for (const auto& k : custom_envelope_properties) {
+      if (k == bare_key) return true;
+    }
+    return false;
+  }
+
   PropertyKind kind_of(std::string_view prop) const {
     auto it = property_kinds.find(std::string(prop));
     return it == property_kinds.end() ? PropertyKind::Static : it->second;

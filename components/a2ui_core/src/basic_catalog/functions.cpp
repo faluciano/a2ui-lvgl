@@ -75,19 +75,27 @@ Result<Json> fn_numeric(const Json& args, FunctionContext&) {
 }
 
 /** ^[^\s@]+@[^\s@]+\.[^\s@]{2,}$ style check, matching the reference SDKs. */
+// A failed email check names its finding, as the other SDKs do.
+Json invalid_email() {
+  return Json::object({{"valid", Json(false)},
+                       {"code", Json("INVALID_EMAIL")},
+                       {"message", Json("Please enter a valid email address (e.g. user@example.com).")},
+                       {"severity", Json("error")}});
+}
+
 Result<Json> fn_email(const Json& args, FunctionContext&) {
   const std::string s = coerce_string(args["value"]);
   auto bad = [](char c) { return c == '@' || std::isspace(static_cast<unsigned char>(c)); };
   const size_t at = s.find('@');
   if (at == std::string::npos || at == 0 || s.find('@', at + 1) != std::string::npos) {
-    return validation_result(false);
+    return invalid_email();
   }
   for (char c : s) {
-    if (c != '@' && bad(c)) return validation_result(false);
+    if (c != '@' && bad(c)) return invalid_email();
   }
   const std::string domain = s.substr(at + 1);
   const size_t dot = domain.rfind('.');
-  if (dot == std::string::npos || dot == 0 || domain.size() - dot - 1 < 2) return validation_result(false);
+  if (dot == std::string::npos || dot == 0 || domain.size() - dot - 1 < 2) return invalid_email();
   return validation_result(true);
 }
 
