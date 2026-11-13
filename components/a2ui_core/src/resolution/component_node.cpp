@@ -226,6 +226,12 @@ Status ComponentNode::invoke(const PropValue& action, const Json& metadata) {
   const bool is_event = payload["event"].is_object() || payload.contains("name");
   SurfaceModel* surface = surface_;
   const std::string source = component_id_;
+  if (surface->routes_to_agent()) {
+    // The action may need the agent: run it asynchronously so it can wait for
+    // answers. Failures are reported on the surface error channel.
+    surface->run_action(payload, source, data_path_, /*user_activated=*/true, nullptr, metadata);
+    return ok_status();
+  }
   Json resolved = surface->resolve_action(payload, data_path_, /*user_activated=*/true);
   if (!is_event) return ok_status();  // A function call ran (or reported its failure).
   if (resolved.is_null()) return make_error(ErrorKind::Validation, "Action of '" + source + "' failed to resolve.");

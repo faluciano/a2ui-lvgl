@@ -85,6 +85,8 @@ struct ActionRun {
   std::string last_key;
   /** Continues the action once every pending call is answered. */
   std::function<void()> resume;
+  /** Optional action.metadata envelope attached when the event is dispatched. */
+  Json metadata;
 
   void stop() {
     stopped = true;
@@ -300,7 +302,7 @@ void run_event(SurfaceModel& surface, const std::shared_ptr<ActionRun>& run, con
   } else {
     out.set("event", std::move(out_evt));
   }
-  if (!surface.dispatch_action(out, source_id).ok()) return;
+  if (!surface.dispatch_action(out, source_id, run->metadata).ok()) return;
   if (on_done) on_done(out);
 }
 
@@ -379,9 +381,10 @@ void SurfaceModel::settle_agent_call(const AgentFunctionCall& call, const std::s
 
 void SurfaceModel::run_action(const Json& action, const std::string& source_component_id,
                               const std::string& scope_path, bool user_activated,
-                              std::function<void(const Json& result)> on_done) {
+                              std::function<void(const Json& result)> on_done, const Json& metadata) {
   if (disposed_ || !action.is_object()) return;
   auto run = std::make_shared<ActionRun>();
+  run->metadata = metadata;
   auto check_name = [&](const Json& evt) {
     const Json& name = evt["name"];
     if (name.is_string() && !name.as_string().empty()) return true;

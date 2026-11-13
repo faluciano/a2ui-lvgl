@@ -177,10 +177,11 @@ class SurfaceModel : public FunctionHost {
    *
    * The first failure stops the action, is reported once on on_error(), and
    * `on_done` never runs; nor does it once the surface is deleted.
+   * `metadata` is an optional action.metadata envelope for the dispatched event.
    */
   void run_action(const Json& action, const std::string& source_component_id = {},
                   const std::string& scope_path = "/", bool user_activated = true,
-                  std::function<void(const Json& result)> on_done = {});
+                  std::function<void(const Json& result)> on_done = {}, const Json& metadata = Json());
 
   /** Expires when the surface is disposed (for callbacks that outlive it). */
   std::weak_ptr<const void> liveness() const { return alive_; }

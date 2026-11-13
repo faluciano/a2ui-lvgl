@@ -84,3 +84,41 @@ TEST(agent_bound_text_re_resolves_when_the_call_settles) {
   resolver.dispose();
   EXPECT_EQ(resolver.active_subscription_count(), size_t(0));
 }
+
+TEST(node_action_waits_for_agent_context_and_keeps_metadata) {
+  std::vector<Json> outbound;
+  a2ui::MessageProcessorOptions opts;
+  opts.outbound_listener = [&outbound](const Json& m) { outbound.push_back(m); };
+  a2ui::MessageProcessor processor({catalog_with_agent_function()}, std::move(opts));
+
+  Json create = parse(R"({"version":"1.0","createSurface":{"surfaceId":"s","components":[
+      {"id":"root","component":"Button","child":"label","action":{"event":{"name":"greet",
+        "context":{"msg":{"@call":"greeting","args":{"name":"Lin"}}}}}},
+      {"id":"label","component":"Text","text":"Go"}]}})");
+  create.find_mut("createSurface")->set("catalogId", a2ui::basic_catalog::kCatalogIdV1);
+  EXPECT_TRUE(processor.process_messages(create).ok());
+  a2ui::SurfaceModel* surface = processor.model().get_surface("s");
+  if (!surface) return;
+  std::vector<Json> actions;
+  auto sub = surface->on_action().subscribe([&actions](const Json& a) { actions.push_back(a); });
+  a2ui::NodeResolver resolver(*surface);
+
+  const Json metadata = parse(R"({"extensions":{"com_example_tap":{"x":1}}})");
+  EXPECT_TRUE(resolver.root()->invoke("action", metadata).ok());
+  EXPECT_EQ(actions.size(), size_t(0));  // Waiting on the agent.
+
+  std::string call_id;
+  for (const auto& m : outbound) {
+    if (m.contains("callAgentFunction")) call_id = m["callAgentFunction"]["functionCallId"].as_string();
+  }
+  EXPECT_TRUE(!call_id.empty());
+  Json body = Json::object({{"functionCallId", Json(call_id)}, {"value", Json("Hi Lin")}});
+  processor.process_messages(Json::object({{"version", Json("1.0")}, {"agentFunctionResponse", body}}));
+
+  EXPECT_EQ(actions.size(), size_t(1));
+  if (actions.size() == 1) {
+    EXPECT_EQ(actions[0]["name"], Json("greet"));
+    EXPECT_EQ(actions[0]["context"]["msg"], Json("Hi Lin"));
+    EXPECT_EQ(actions[0]["metadata"], metadata);
+  }
+}
