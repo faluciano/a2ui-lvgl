@@ -8,6 +8,8 @@
 
 #include "a2ui/node_resolver.h"
 
+#include "a2ui/agent_call.h"
+
 #include <algorithm>
 #include <map>
 #include <set>
@@ -160,11 +162,24 @@ struct ResolverState : std::enable_shared_from_this<ResolverState> {
         [this](const std::string& id) { on_component_deleted(id); }));
     surface_subs.add(s.data_model().on_changed().subscribe([this](const std::string&) { request_flush(); }));
     surface_subs.add(s.on_disposed().subscribe([this] { dispose(); }));
+    surface_subs.add(s.on_agent_call_settled().subscribe(
+        [this](const AgentCallSettlement& settled) { on_agent_call_settled(settled.key); }));
     root_dirty = true;
     flush();
   }
 
   // --- Scheduling -------------------------------------------------------------
+
+  /** Re-resolves the nodes whose latest pass made the agent call that settled. */
+  void on_agent_call_settled(const std::string& key) {
+    if (disposed) return;
+    for (auto& w : watches) {
+      for (ComponentNode* n : w.second.nodes) {
+        if (n->agent_tracker_ && n->agent_tracker_->makes_call(key)) mark_dirty(n);
+      }
+    }
+    request_flush();
+  }
 
   void mark_dirty(ComponentNode* n) {
     if (n->disposed_ || n->dirty_) return;
@@ -431,7 +446,9 @@ struct ResolverState : std::enable_shared_from_this<ResolverState> {
     }
     std::vector<std::string> deps;
     std::vector<std::pair<std::string, NodePtr>> edges;
-    DataContext ctx(surface->data_model(), surface, n->data_path_, n->index_);
+    if (!n->agent_tracker_) n->agent_tracker_ = std::make_shared<AgentCallTracker>(*surface);
+    n->agent_tracker_->begin_pass();
+    DataContext ctx(surface->data_model(), n->agent_tracker_.get(), n->data_path_, n->index_);
     ctx.set_dependency_sink(&deps);
     Binder b(ctx);
     b.rs = this;
@@ -494,6 +511,7 @@ struct ResolverState : std::enable_shared_from_this<ResolverState> {
     dep_subs -= n->dep_subs_.size();
     n->dep_subs_.clear();
     n->deps_.clear();
+    n->agent_tracker_.reset();
     unregister_node(n);
     if (n->state_ == NodeState::UnknownType) {
       dispatched.erase("UNKNOWN_COMPONENT_TYPE|" + n->component_id_ + "|" + n->data_path_);

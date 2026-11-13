@@ -42,6 +42,8 @@
 
 namespace a2ui {
 
+class AgentCallTracker;
+
 class ComponentModel;
 class ComponentNode;
 class SurfaceModel;
@@ -250,6 +252,9 @@ class ComponentNode : public std::enable_shared_from_this<ComponentNode> {
   std::vector<std::string> deps_;
   std::vector<Subscription> dep_subs_;
   std::vector<std::pair<std::string, NodePtr>> edges_;  // Child nodes by edge key.
+  // Evaluates this node's functions and remembers which agent calls it made,
+  // so a settled call re-resolves exactly the nodes that read it.
+  std::shared_ptr<AgentCallTracker> agent_tracker_;
   void* user_data_ = nullptr;
 };
 
