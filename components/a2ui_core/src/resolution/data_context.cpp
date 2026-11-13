@@ -13,23 +13,23 @@ namespace a2ui {
 
 namespace function_errors {
 Error not_found(const std::string& name) {
-  return make_error(ErrorKind::Expression, "Function '" + name + "' not found", "FUNCTION_NOT_FOUND");
+  return make_error(ErrorKind::Expression, "Function '" + name + "' not found", "EXPRESSION_ERROR");
 }
 Error caller_disallowed(const std::string& name) {
   return make_error(ErrorKind::Expression,
                     "Function '" + name + "' cannot be called by renderer (allowedCallers is agentOnly).",
-                    "CALLER_NOT_ALLOWED");
+                    "EXPRESSION_ERROR");
 }
 Error user_activation_required(const std::string& name) {
   return make_error(ErrorKind::Expression,
                     "Function '" + name +
                         "' requires user activation and cannot be evaluated without an active user gesture.",
-                    "USER_ACTIVATION_REQUIRED");
+                    "EXPRESSION_ERROR");
 }
 Error invalid_arguments(const std::string& name) {
   return make_error(ErrorKind::Validation,
                     "Validation failed for function '" + name + "': the arguments do not match its schema.",
-                    "VALIDATION_FAILED");
+                    "EXPRESSION_ERROR");
 }
 }  // namespace function_errors
 
@@ -177,6 +177,7 @@ Json DataContext::resolve_value(const Json& value, bool user_activated) {
   Json r = scoped.resolve_value(value);
   failed_ = failed_ || scoped.failed_;
   deferred_ = deferred_ || scoped.deferred_;
+  deferred_arguments_ = deferred_arguments_ || scoped.deferred_arguments_;
   return r;
 }
 
@@ -217,6 +218,7 @@ bool DataContext::resolve_arguments(const Json& call, Json* out) {
   failed_ = failed_ || failed_before;
   if (unsettled) {
     deferred_ = true;
+    deferred_arguments_ = true;
     return false;
   }
   *out = std::move(args);
@@ -330,7 +332,8 @@ Json DataContext::route_to_agent(const std::string& name, const FunctionDecl* de
   Json args;
   if (!resolve_arguments(call, &args)) return nullptr;
   if (!is_json_representable(args)) {
-    fail(make_error(ErrorKind::Validation, "The arguments of function '" + name + "' are not valid JSON."),
+    fail(make_error(ErrorKind::Validation, "The arguments of function '" + name + "' are not valid JSON.",
+                    "EXPRESSION_ERROR"),
          name);
     return nullptr;
   }
@@ -342,11 +345,12 @@ Json DataContext::route_to_agent(const std::string& name, const FunctionDecl* de
     }
   }
   Json value;
-  if (!host_->agent_function_value(name, catalog_id, args, &value)) {
-    deferred_ = true;
-    return nullptr;
+  switch (host_->agent_function_value(name, catalog_id, args, &value)) {
+    case AgentCallStatus::Answered: return value.is_undefined() ? Json(nullptr) : value;
+    case AgentCallStatus::Pending: deferred_ = true; return nullptr;
+    case AgentCallStatus::Failed: failed_ = true; return nullptr;
   }
-  return value;
+  return nullptr;
 }
 
 }  // namespace a2ui

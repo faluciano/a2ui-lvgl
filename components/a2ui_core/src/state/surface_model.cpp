@@ -281,11 +281,6 @@ Status SurfaceModel::validate_function_args(const FunctionApi& api, const Json& 
   return ok_status();
 }
 
-bool SurfaceModel::agent_function_value(const std::string& name, const std::string& catalog_id, const Json& args,
-                                        Json* value) {
-  return agent_handler_ ? agent_handler_(name, catalog_id, args, value) : false;
-}
-
 Status SurfaceModel::open_url(const std::string& url) {
   if (url_handler_) return url_handler_(url);
   return ok_status();  // Headless: the request is accepted and dropped.
@@ -296,7 +291,11 @@ void SurfaceModel::dispose() {
   disposed_ = true;
   on_disposed_.emit();
   on_disposed_.clear();
-  agent_handler_ = nullptr;
+  // Agent calls that settle from now on are ignored and report nothing.
+  alive_.reset();
+  agent_caller_ = nullptr;
+  agent_cache_.clear();
+  on_agent_call_settled_.clear();
   url_handler_ = nullptr;
   data_model_.dispose();
   components_.dispose();

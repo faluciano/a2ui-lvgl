@@ -20,6 +20,7 @@
 #include <string>
 #include <string_view>
 
+#include "a2ui/agent_call.h"
 #include "a2ui/catalog.h"
 #include "a2ui/component_model.h"
 #include "a2ui/data_context.h"
@@ -31,14 +32,6 @@
 namespace a2ui {
 
 using CatalogMap = std::map<std::string, CatalogPtr, std::less<>>;
-
-/**
- * Sends a call to a function the renderer does not implement to the agent
- * (v1.0 fallback routing; installed by the RPC layer). Returns true and sets
- * `*value` when the answer is available, false while it is pending.
- */
-using AgentFunctionHandler = std::function<bool(const std::string& name, const std::string& catalog_id,
-                                                const Json& args, Json* value)>;
 
 /** Handles openUrl. Return an error to refuse. */
 using UrlHandler = std::function<Status(const std::string& url)>;
@@ -117,6 +110,10 @@ class SurfaceModel : public FunctionHost {
    * call with `user_activated` and returns its result. Returns null when
    * the action failed; the failure was reported on on_error()
    * (INVALID_ACTION for a malformed event).
+   *
+   * Synchronous: it cannot wait for the agent. A call routed to the agent
+   * reads as pending (null) through the reactive cache. Run actions that
+   * may call the agent with run_action().
    */
   Json resolve_action(const Json& action, const std::string& scope_path = "/", bool user_activated = true);
 
@@ -134,7 +131,59 @@ class SurfaceModel : public FunctionHost {
 
   /** Clock used for action timestamps (seconds since the epoch); the default reads the system time. */
   void set_clock(std::function<double()> clock) { clock_ = std::move(clock); }
-  void set_agent_function_handler(AgentFunctionHandler handler) { agent_handler_ = std::move(handler); }
+
+  // -- Agent function routing (v1.0; blueprint "Renderer Fallback Routing") --
+  // Implemented in src/rpc/surface_agent_calls.cpp.
+
+  /**
+   * Sends calls to functions the renderer does not implement to the agent.
+   * MessageProcessor installs its RpcHandler on every v1.0 surface. Not
+   * owned. Setting, replacing or clearing it drops the shared calls and the
+   * cache; answers to calls made through a previous caller are ignored.
+   */
+  void set_agent_function_caller(AgentFunctionCaller* caller);
+  AgentFunctionCaller* agent_function_caller() const { return agent_caller_; }
+
+  /**
+   * The calls the surface's reactive evaluations (bindings, check rules)
+   * routed to the agent: identical calls share one request while pending,
+   * answers are kept (bounded, see AgentCallCache), and failures are kept
+   * so that re-evaluating a binding does not send a failed call again. A
+   * consumer that should send a failed call again when it first makes it
+   * evaluates through an AgentCallTracker.
+   */
+  AgentCallCache& agent_call_cache() { return agent_cache_; }
+  /**
+   * Fires after a reactive agent call settles into agent_call_cache() with
+   * the agent's value or a failure (already reported on on_error()).
+   * Evaluations that made the call re-evaluate. A cancelled call settles
+   * into nothing and fires nothing.
+   */
+  const EventSource<AgentCallSettlement>& on_agent_call_settled() const { return on_agent_call_settled_; }
+
+  /**
+   * Runs an action in response to a user gesture, routing calls to the
+   * agent as an action does: every call is sent afresh (never shared with
+   * or read from the reactive cache), and the action waits for the answers.
+   *
+   * - A function call action ({functionCall: {...}} or a bare call) runs the
+   *   call; arguments that wait on the agent are settled first. `on_done`
+   *   receives the call's result.
+   * - An event action ({event: {name, context?, userMessage?}} or the
+   *   {name, ...} shorthand) resolves its `context` entries in order, then
+   *   `userMessage`, waiting for each agent call before the next entry, and
+   *   is then dispatched (on_action()). `on_done` receives the dispatched
+   *   action payload.
+   *
+   * The first failure stops the action, is reported once on on_error(), and
+   * `on_done` never runs; nor does it once the surface is deleted.
+   */
+  void run_action(const Json& action, const std::string& source_component_id = {},
+                  const std::string& scope_path = "/", bool user_activated = true,
+                  std::function<void(const Json& result)> on_done = {});
+
+  /** Expires when the surface is disposed (for callbacks that outlive it). */
+  std::weak_ptr<const void> liveness() const { return alive_; }
   void set_url_handler(UrlHandler handler) { url_handler_ = std::move(handler); }
 
   bool disposed() const { return disposed_; }
@@ -150,9 +199,9 @@ class SurfaceModel : public FunctionHost {
                                                   const std::string& function_name) override;
   void report_function_error(const Error& error, const std::string& function_name) override;
   Status validate_function_args(const FunctionApi& api, const Json& args) override;
-  bool routes_to_agent() const override { return static_cast<bool>(agent_handler_); }
-  bool agent_function_value(const std::string& name, const std::string& catalog_id, const Json& args,
-                            Json* value) override;
+  bool routes_to_agent() const override;
+  AgentCallStatus agent_function_value(const std::string& name, const std::string& catalog_id, const Json& args,
+                                       Json* value) override;
   Status open_url(const std::string& url) override;
 
  private:
@@ -170,7 +219,13 @@ class SurfaceModel : public FunctionHost {
   EventSource<Json> on_error_;
   EventSource<Error> on_function_error_;
   EventSource<> on_disposed_;
-  AgentFunctionHandler agent_handler_;
+  void settle_agent_call(const AgentFunctionCall& call, const std::string& key, Result<Json> outcome);
+
+  AgentFunctionCaller* agent_caller_ = nullptr;
+  AgentCallCache agent_cache_;
+  EventSource<AgentCallSettlement> on_agent_call_settled_;
+  uint32_t agent_generation_ = 0;
+  std::shared_ptr<int> alive_ = std::make_shared<int>(0);
   UrlHandler url_handler_;
   std::function<double()> clock_;
   bool disposed_ = false;

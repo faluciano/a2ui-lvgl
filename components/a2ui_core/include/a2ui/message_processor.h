@@ -12,7 +12,9 @@
 // pre-1.0 adapters would be registered; none are built in.
 //
 // RPC: callRendererFunction and agentFunctionResponse are validated by the
-// adapter and forwarded to an RpcHandler. Without one they are dropped.
+// adapter and forwarded to the processor's RpcHandler (a2ui/rpc.h), which
+// also sends the calls v1.0 surfaces route to the agent. Hosts call tick()
+// from their loop so that agent calls time out.
 
 #pragma once
 
@@ -26,6 +28,7 @@
 #include "a2ui/catalog.h"
 #include "a2ui/error.h"
 #include "a2ui/json.h"
+#include "a2ui/rpc.h"
 #include "a2ui/surface_model.h"
 #include "a2ui/validation_config.h"
 
@@ -113,36 +116,14 @@ class VersionAdapterRegistry {
   std::vector<std::unique_ptr<VersionAdapter>> adapters_;
 };
 
-class MessageProcessor;
-
-/**
- * Receives inbound RPC operations (blueprint section D). The processor
- * resolves the target surface (null when the call names none or names an
- * unknown one) and forwards; responses go out through the processor's
- * outbound listener (MessageProcessor::send_outbound).
- */
-class RpcHandler {
- public:
-  virtual ~RpcHandler() = default;
-  virtual void handle_call_renderer_function(const InternalOperation& op, SurfaceModel* surface,
-                                             MessageProcessor& processor) = 0;
-  virtual void handle_agent_function_response(const InternalOperation& op, MessageProcessor& processor) = 0;
-  /** A surface was deleted: cancel its pending outbound calls. */
-  virtual void cancel_surface_calls(const std::string& surface_id) {}
-  virtual void dispose() {}
-};
-
-/** Receives renderer-to-agent messages ({version, error} envelopes, RPC responses). */
-using OutboundListener = std::function<void(const Json& message)>;
-
 struct MessageProcessorOptions {
   /** Validation rules; std::nullopt skips schema, composition and topology checks. */
   std::optional<ValidationConfig> validation_config = ValidationConfig::strict();
   OutboundListener outbound_listener;
   /** Defaults to VersionAdapterRegistry::make_default(). */
   std::shared_ptr<VersionAdapterRegistry> adapters;
-  /** Not owned; must outlive the processor. */
-  RpcHandler* rpc = nullptr;
+  /** Options of the processor's RpcHandler (default agent call timeout, clock). */
+  RpcOptions rpc;
 };
 
 /** Options for one process_messages call. */
@@ -165,6 +146,7 @@ struct CapabilitiesOptions {
 class MessageProcessor {
  public:
   explicit MessageProcessor(std::vector<CatalogPtr> catalogs, MessageProcessorOptions options = {});
+  /** Deletes the surfaces and drops pending agent calls without calling back (see dispose()). */
   ~MessageProcessor();
   MessageProcessor(const MessageProcessor&) = delete;
   MessageProcessor& operator=(const MessageProcessor&) = delete;
@@ -202,15 +184,35 @@ class MessageProcessor {
    */
   Result<Json> get_renderer_data_model(std::string_view version = {}) const;
 
-  void set_outbound_listener(OutboundListener listener) { outbound_ = std::move(listener); }
+  /** Sets the listener of every renderer-to-agent message (the RPC handler's too). */
+  void set_outbound_listener(OutboundListener listener);
+  bool has_outbound_listener() const { return static_cast<bool>(outbound_); }
   /** Sends a renderer-to-agent message to the outbound listener. */
   void send_outbound(const Json& message) const;
+
+  /** The RPC layer (blueprint `processor.rpc`). */
+  RpcHandler& rpc() { return *rpc_; }
+  const RpcHandler& rpc() const { return *rpc_; }
+  /** Same as rpc().call_agent_function (mirrored on the processor, as the blueprint does). */
+  Result<std::string> call_agent_function(const std::string& surface_id, const Json& call_function,
+                                          AgentCallDone done, const AgentCallOptions& options = {}) {
+    return rpc_->call_agent_function(surface_id, call_function, std::move(done), options);
+  }
+  /**
+   * Advances RPC time (monotonic milliseconds): agent calls whose timeout
+   * has passed fail with TIMEOUT. Call it from the host loop (on device,
+   * the LVGL task), e.g. with lv_tick_get() or esp_timer_get_time() / 1000.
+   */
+  void tick(uint64_t now_ms) { rpc_->tick(now_ms); }
   /** Every mapped error envelope (also sent to the outbound listener). */
   const EventSource<Json>& on_error() const { return on_error_; }
 
   const std::optional<ValidationConfig>& validation_config() const { return validation_config_; }
 
-  /** Deletes every surface and disposes the RPC handler. Later calls fail with ErrorKind::State. */
+  /**
+   * Deletes every surface and disposes the RPC handler (pending agent calls
+   * fail with CANCELLED). Later calls fail with ErrorKind::State.
+   */
   void dispose();
   bool disposed() const { return disposed_; }
 
@@ -231,7 +233,7 @@ class MessageProcessor {
   std::optional<ValidationConfig> validation_config_;
   OutboundListener outbound_;
   std::shared_ptr<VersionAdapterRegistry> adapters_;
-  RpcHandler* rpc_;
+  std::unique_ptr<RpcHandler> rpc_;
   SurfaceGroupModel model_;
   EventSource<Json> on_error_;
   bool disposed_ = false;
