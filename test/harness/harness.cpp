@@ -3,6 +3,7 @@
 
 #include "harness.h"
 
+#include <cctype>
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -81,7 +82,15 @@ Outcome check_error(const a2ui::Error& error, const Json& expect) {
     }
   }
   if (const Json* msg = expect.find("message"); msg && msg->is_string()) {
-    if (!regex_search(msg->as_string(), error.message)) {
+    // As the reference harnesses do: a case-insensitive substring match
+    // first (messages such as "Unsupported external $ref" are not meant as
+    // regexes), then a regex search.
+    auto lower = [](std::string t) {
+      for (char& c : t) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      return t;
+    };
+    const bool substring = lower(error.message).find(lower(msg->as_string())) != std::string::npos;
+    if (!substring && !regex_search(msg->as_string(), error.message)) {
       return Outcome::fail("error message /" + msg->as_string() + "/ did not match: " + got);
     }
   }

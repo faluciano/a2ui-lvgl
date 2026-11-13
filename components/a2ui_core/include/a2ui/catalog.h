@@ -20,6 +20,7 @@
 
 #include "a2ui/error.h"
 #include "a2ui/json.h"
+#include "a2ui/schema.h"
 
 namespace a2ui {
 
@@ -54,10 +55,18 @@ using FunctionFn = std::function<Result<Json>(const Json& args, FunctionContext&
 
 struct FunctionApi {  // [core]
   std::string name;
-  /** "string", "number", "boolean", "array", "object", "any" or "void". */
+  /**
+   * "string", "number", "boolean", "array", "object", "any" or "void"
+   * (catalogs may also declare "validationResult").
+   */
   std::string return_type = "any";
   /** JSON Schema for the `args` object. */
   Json args_schema;
+  /**
+   * The function's whole definition as the catalog declares it (validates a
+   * complete call: `@call`, `args`). Undefined for functions added in code.
+   */
+  Json schema;
   AllowedCallers allowed_callers = AllowedCallers::RendererOnly;
   bool requires_user_activation = false;
   Json description;
@@ -90,12 +99,15 @@ struct ComponentApi {  // [core]
   Json schema;
   /** Classification of each top-level property, derived from schema $refs. */
   std::map<std::string, PropertyKind> property_kinds;
-  /** Properties the schema marks required. */
+  /**
+   * Properties the schema marks required, including those of its `allOf`
+   * members and mixins. The envelope keys `id` and `component` are left out.
+   */
   std::vector<std::string> required;
   /** Composition constraints; absent means unconstrained. */
   std::optional<std::vector<std::string>> allowed_parents;
   std::optional<std::vector<std::string>> allowed_children;
-  /** ComponentDefinition.metadata (v1.0). */
+  /** ComponentDefinition.metadata (v1.0); undefined when the definition has none. */
   Json metadata;
 
   PropertyKind kind_of(std::string_view prop) const {
@@ -104,9 +116,83 @@ struct ComponentApi {  // [core]
   }
 };
 
+class Catalog;
+using CatalogPtr = std::shared_ptr<Catalog>;
+
+/**
+ * Normalizes a protocol version spelling ("v0.9", "0.9.1", "1.0", "v1.0.0")
+ * to "1.0", "0.9" or "0.8". Returns an empty string for anything else.
+ */
+std::string normalize_protocol_version(std::string_view version);
+
+/** One entry of a `Catalog::derive` list: keep `name`, or add `definition` under it. */
+struct DeriveEntry {
+  std::string name;
+  /** Undefined to keep the source catalog's entry `name`; else a new definition. */
+  Json definition;
+};
+
 class Catalog {
  public:
   Catalog() = default;
+
+  /**
+   * Loads a catalog document (specification catalog_definition.json shape).
+   *
+   * `catalog_id` and `protocol_version`, when non-empty, take precedence
+   * over the document's `catalogId` and `protocolVersion`. A document with
+   * neither version targets "0.9", the specification default.
+   *
+   * Errors (ErrorKind::Catalog): not an object, no catalog id, an unknown
+   * version, malformed components/functions, and for v1.0: an identifier
+   * that is not UAX #31 (component, property, function, argument), the
+   * reserved component name `Surface`, a `$ref` to a document other than
+   * the catalog itself or common_types.json, and requiresUserActivation
+   * with allowedCallers other than rendererOnly. Invalid component
+   * `metadata` is ErrorKind::Validation.
+   *
+   * Entries a `$defs.anyComponent` / `$defs.anyFunction` oneOf union leaves
+   * out are not loaded (but are kept for to_json).
+   *
+   * Memory: component and function definitions are moved out of the
+   * document into the ComponentApi / FunctionApi, not copied; `source()`
+   * keeps the rest of the document.
+   */
+  static Result<CatalogPtr> from_json(const Json& document, std::string_view catalog_id = {},
+                                      std::string_view protocol_version = {});
+
+  /** The catalog document (unbundled: external references kept as written). */
+  Json to_json() const;
+
+  /**
+   * A self-contained JSON Schema for the catalog: to_json() with every
+   * common_types.json definition it reaches copied into `$defs` and every
+   * reference rewritten to a local "#/..." pointer.
+   */
+  Json validation_schema() const;
+
+  /**
+   * A catalog with a new id built from entries of this one (see DeriveEntry).
+   * A null list keeps every entry of that kind. Keeps the protocol version,
+   * theme and `$defs`; drops `$id`, title, description and instructions
+   * (replaced by `instructions` when given). An unknown name is
+   * ErrorKind::Catalog.
+   */
+  Result<CatalogPtr> derive(std::string_view id, const std::vector<DeriveEntry>* components,
+                            const std::vector<DeriveEntry>* functions,
+                            const std::string* instructions = nullptr) const;
+
+  /**
+   * Schema documents for validating against this catalog: "catalog.json"
+   * (this catalog; "#/components/<name>" and "#/functions/<name>" reach the
+   * loaded definitions) and "common_types.json" of its protocol version.
+   * The registry refers to this catalog, which must outlive it.
+   */
+  SchemaRegistry schema_registry() const;
+
+  /** The version as declared or given, before normalization (e.g. "v0.9"); may be empty. */
+  const std::string& declared_protocol_version() const { return declared_protocol_version_; }
+  bool is_v1() const { return protocol_version_ == "1.0"; }
 
   const std::string& id() const { return id_; }  // [core]
   /** Normalized protocol version: "1.0", "0.9" or "0.8". [core] */
@@ -126,18 +212,23 @@ class Catalog {
   void set_id(std::string id) { id_ = std::move(id); }
   void set_protocol_version(std::string v) { protocol_version_ = std::move(v); }
 
-  /** The catalog document this was loaded from (for $ref resolution and to_json). */
+  /**
+   * The catalog document this was loaded from, without the bodies of the
+   * loaded components and functions (those live in components() and
+   * functions()). Resolve references through schema_registry().
+   */
   const Json& source() const { return source_; }
   void set_source(Json j) { source_ = std::move(j); }
 
  private:
+  const Json* resolve_catalog_pointer(std::string_view pointer) const;
+
   std::string id_;
   std::string protocol_version_ = "1.0";
+  std::string declared_protocol_version_;
   std::vector<ComponentApi> components_;
   std::vector<FunctionDecl> functions_;
   Json source_;
 };
-
-using CatalogPtr = std::shared_ptr<Catalog>;
 
 }  // namespace a2ui
