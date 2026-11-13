@@ -28,6 +28,7 @@
 #include "a2ui/data_context.h"
 #include "a2ui/locale.h"
 #include "a2ui/message_processor.h"
+#include "a2ui/node_resolver.h"
 #include "a2ui/schema.h"
 #include "a2ui/spec_documents.h"
 #include "a2ui/surface_model.h"
@@ -431,85 +432,18 @@ Outcome check_full_error(const Error& error, const Json& expect, const std::vect
 }
 
 // --- Resolution (the Python harness's _resolve_surface_components) -----------
+//
+// Surface expectations name components by id, including orphans and
+// definitions resolved at "/", plus template instances as `<id>_<i>` and
+// `<id>-[<scope>]`. Each instance is resolved by the core's one-shot binder
+// (a2ui::resolve_component_snapshot, the per-component resolution the
+// NodeResolver uses; checks evaluated by a2ui::evaluate_checks); this
+// walk only decides which instances the expectations can address.
 
 struct Node {
   std::string type;
   Json props;
 };
-
-/** ValidationResult of one check rule (GenericBinder._process_rule_val). */
-Json rule_result(const Json& val, const Json* explicit_msg, const std::string& fallback) {
-  bool is_obj = false;
-  Json raw;
-  if (val.is_object()) {
-    is_obj = val.contains("severity") || val.contains("code");
-    raw = val;
-  } else {
-    raw = Json::object({{"valid", Json(a2ui::coerce_bool(val))}});
-  }
-  if (explicit_msg) {
-    raw.set("message", *explicit_msg);
-  } else if (!raw["message"].is_string() || raw["message"].as_string().empty()) {
-    raw.set("message", Json(fallback));
-  }
-  Json dumped = Json::object();
-  const std::string sev = str(raw["severity"]);
-  const bool well_formed = raw["valid"].is_bool() && (raw["code"].is_undefined() || raw["code"].is_string()) &&
-                           raw["message"].is_string() &&
-                           (raw["severity"].is_nullish() || sev == "error" || sev == "warning" || sev == "info");
-  if (well_formed) {
-    dumped.set("valid", raw["valid"]);
-    if (raw["code"].is_string()) dumped.set("code", raw["code"]);
-    dumped.set("message", raw["message"]);
-    if (!sev.empty()) dumped.set("severity", raw["severity"]);
-  } else {
-    dumped.set("valid", Json(false));
-    dumped.set("message", explicit_msg ? *explicit_msg : Json(fallback));
-  }
-  if (!dumped["valid"].as_bool() && !dumped.contains("severity")) dumped.set("severity", Json("error"));
-  dumped.set("_is_obj", Json(is_obj));
-  return dumped;
-}
-
-void apply_checks(const Json& rules, a2ui::DataContext& ctx, Json* props) {
-  std::vector<Json> results;
-  for (const auto& rule : rules.as_array()) {
-    Json condition = rule;
-    const Json* rule_msg = nullptr;
-    if (rule.is_object()) {
-      if (rule.contains("condition")) condition = rule["condition"];
-      if (rule["message"].is_string()) rule_msg = &rule["message"];
-    }
-    const bool path_bound = condition.is_object() && condition["@path"].is_string();
-    const Json* explicit_msg = path_bound ? nullptr : rule_msg;
-    const std::string fallback = rule_msg ? rule_msg->as_string() : std::string("Validation failed");
-    results.push_back(rule_result(ctx.resolve_value(condition), explicit_msg, fallback));
-  }
-  Json errors{Json::Array{}}, all{Json::Array{}};
-  bool valid = true;
-  const Json* first = nullptr;
-  for (const auto& r : results) {
-    if (r["valid"].as_bool()) continue;
-    if (!first) first = &r;
-    Json clean = r;
-    clean.erase("_is_obj");
-    all.push_back(clean);
-    if (str(r["severity"]).empty() || str(r["severity"]) == "error") {
-      valid = false;
-      if (!str(r["message"]).empty()) errors.push_back(r["message"]);
-    }
-  }
-  Json result = Json::object({{"valid", Json(true)}});
-  if (first) {
-    result = *first;
-    result.erase("_is_obj");
-    if (!(*first)["_is_obj"].as_bool()) result.erase("severity");
-  }
-  props->set("isValid", Json(valid));
-  props->set("validationErrors", std::move(errors));
-  props->set("validationResults", std::move(all));
-  props->set("validationResult", std::move(result));
-}
 
 class Resolver {
  public:
@@ -528,38 +462,17 @@ class Resolver {
     const a2ui::ComponentModel* comp = surface_.components_model().get(id);
     if (!comp) return;
     pending_.insert(key);
-    std::optional<long> index;
-    const auto segs = a2ui::path::split(data_path);
-    if (!segs.empty()) {
-      const long i = a2ui::path::parse_index(segs.back());
-      if (i >= 0) index = i;
-    }
-    a2ui::DataContext ctx(surface_.data_model(), &surface_, data_path, index);
+    const std::optional<long> index = a2ui::scope_index_of(data_path);
     Node node;
     node.type = comp->type();
-    node.props = Json::object();
-    const a2ui::ComponentApi* api = comp->api();
-    for (const auto& m : comp->properties().as_object()) {
-      const a2ui::PropertyKind kind = api ? api->kind_of(m.first) : a2ui::PropertyKind::DynamicValue;
-      if (m.first == "@checks" || kind == a2ui::PropertyKind::Checks) {
-        node.props.set(m.first, m.second);
-        apply_checks(m.second, ctx, &node.props);
-        continue;
-      }
-      if (kind == a2ui::PropertyKind::ChildList || kind == a2ui::PropertyKind::ComponentId ||
-          kind == a2ui::PropertyKind::Action) {
-        node.props.set(m.first, m.second);
-        continue;
-      }
-      node.props.set(m.first, ctx.resolve_value(m.second));
-    }
+    node.props = a2ui::resolve_component_snapshot(surface_, *comp, data_path);
     // Template children, one instance per item.
     for (const auto& m : comp->properties().as_object()) {
       const Json& v = m.second;
       if (!v.is_object() || !v["componentId"].is_string()) continue;
       const Json& raw = v["@path"].is_string() ? v["@path"] : v["path"];
       if (!raw.is_string()) continue;
-      const std::string tpl_path = ctx.absolute_path(raw.as_string());
+      const std::string tpl_path = a2ui::path::resolve(raw.as_string(), data_path);
       const Json arr = surface_.data_model().value_at(tpl_path);
       if (!arr.is_array()) continue;
       std::string base = tpl_path;

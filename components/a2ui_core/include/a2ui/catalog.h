@@ -100,6 +100,13 @@ struct ComponentApi {  // [core]
   /** Classification of each top-level property, derived from schema $refs. */
   std::map<std::string, PropertyKind> property_kinds;
   /**
+   * For a Static top-level property whose schema is an object, or an array
+   * of objects, with declared properties of their own: the classification
+   * of those inner properties (Tabs.tabs[] -> {title: DynamicString, child:
+   * ComponentId}). Only recorded when some inner property is not Static.
+   */
+  std::map<std::string, std::map<std::string, PropertyKind>> nested_kinds;
+  /**
    * Properties the schema marks required, including those of its `allOf`
    * members and mixins. The envelope keys `id` and `component` are left out.
    */
@@ -148,6 +155,11 @@ struct ComponentApi {  // [core]
   PropertyKind kind_of(std::string_view prop) const {
     auto it = property_kinds.find(std::string(prop));
     return it == property_kinds.end() ? PropertyKind::Static : it->second;
+  }
+  /** Inner property kinds of `prop` (see nested_kinds), or null. */
+  const std::map<std::string, PropertyKind>* nested_kinds_of(std::string_view prop) const {
+    auto it = nested_kinds.find(std::string(prop));
+    return it == nested_kinds.end() ? nullptr : &it->second;
   }
 };
 

@@ -54,6 +54,9 @@ $(SMOKE_OBJS): TEST_CXXFLAGS += -Icomponents/a2ui_lvgl/include $(LVGL_INC)
 
 SUITE_YAML := $(wildcard $(UPSTREAM)/conformance/core/*.yaml)
 SUITE_JSON := $(SUITE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.json)
+# Fixtures the node_resolution suite names (test_data/node/*.yaml).
+FIXTURE_YAML := $(wildcard $(UPSTREAM)/conformance/test_data/node/*.yaml)
+SUITE_JSON += $(FIXTURE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.json)
 
 .PHONY: all test unit conformance suites lvgl lvgl-smoke clean
 

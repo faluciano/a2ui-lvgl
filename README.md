@@ -15,7 +15,7 @@ shows component text in a column of labels.
 
 | Path | Contents |
 | --- | --- |
-| `components/a2ui_core` | Protocol core: JSON, data model, expressions, catalogs. No UI dependency. |
+| `components/a2ui_core` | Protocol core: JSON, data model, expressions, catalogs, message processing, and the `NodeResolver` that turns a surface into a live tree of resolved `ComponentNode`s. No UI dependency. |
 | `components/a2ui_lvgl` | LVGL adapter (placeholder for now). Depends on `a2ui_core` and `lvgl`. |
 | `examples/basic_surface` | ESP-IDF app that renders an embedded A2UI sample with `esp_lvgl_port`. |
 | `test/unit`, `test/harness` | Host unit tests and the conformance harness. |

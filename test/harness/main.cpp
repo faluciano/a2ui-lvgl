@@ -92,6 +92,9 @@ int main(int argc, char** argv) {
   }
   if (ctx.repo_root.empty()) ctx.repo_root = "third_party/a2ui";
   ctx.conformance_root = ctx.repo_root + "/conformance";
+  if (auto slash = suites_dir.find_last_of('/'); slash != std::string::npos) {
+    ctx.converted_root = suites_dir.substr(0, slash);
+  }
 
   const auto known = load_known_failures(known_path);
   auto& registry = harness::action_registry();
@@ -128,7 +131,9 @@ int main(int argc, char** argv) {
         case Outcome::kPass:
           ++pass;
           if (is_known) xpasses.push_back(suite + "::" + name);
-          if (ctx.verbose) std::printf("  PASS %s\n", name.c_str());
+          if (ctx.verbose) {
+            std::printf("  PASS %s%s%s\n", name.c_str(), out.detail.empty() ? "" : ": ", out.detail.c_str());
+          }
           break;
         case Outcome::kUnsupported:
           ++unsup;

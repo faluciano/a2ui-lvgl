@@ -187,6 +187,9 @@ class Signal {
     return true;
   }
 
+  /** Sets the value without notifying (an initial value no one has observed yet). */
+  void reset(T v) { state_->value = std::move(v); }
+
   /** Sets the value and notifies even if equal (for identity-sensitive values). */
   void set_force(T v) {
     state_->value = std::move(v);
