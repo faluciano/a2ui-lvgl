@@ -1,0 +1,6 @@
+version: "0.1.0"
+description: A2UI v1.0 protocol core (messages, data model, expressions) for embedded renderers
+license: Apache-2.0
+url: https://github.com/a2ui-project/a2ui
+dependencies:
+  idf: ">=5.4"
