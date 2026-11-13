@@ -207,6 +207,7 @@ struct Topology {
   const Candidate& g;
   const Adjacency& adj;
   int max_depth;
+  bool allow_cycles;
   std::unordered_set<std::string_view> visited, on_stack;
 
   Status dfs(std::string_view id, int depth) {
@@ -222,7 +223,7 @@ struct Topology {
         const std::string_view nid = g.get(r.id)->id();
         if (!visited.count(nid)) {
           A2UI_RETURN_IF_ERROR(dfs(nid, depth + 1));
-        } else if (on_stack.count(nid)) {
+        } else if (on_stack.count(nid) && !allow_cycles) {
           return recursion("Circular reference detected involving component '" + r.id + "'");
         }
       }
@@ -243,7 +244,7 @@ Result<std::set<std::string>> analyze_topology(const Candidate& g, const std::ve
       }
     }
   }
-  Topology t{g, adj, config.max_depth.value_or(kMaxGlobalDepth), {}, {}};
+  Topology t{g, adj, config.max_depth.value_or(kMaxGlobalDepth), config.allow_cyclic_references, {}, {}};
   if (config.allow_missing_root) {
     std::vector<std::string_view> ids;
     for (const ComponentModel* c : all) ids.push_back(c->id());

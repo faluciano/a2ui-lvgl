@@ -33,7 +33,7 @@ if(NOT TARGET a2ui_core)
                    "${CMAKE_CURRENT_BINARY_DIR}/a2ui_core")
 endif()
 if(NOT TARGET lvgl)
-  message(FATAL_ERROR "a2ui_lvgl: no `lvgl` target. Add LVGL (v9.4 or later) before this directory.")
+  message(FATAL_ERROR "a2ui_lvgl: no `lvgl` target. Add LVGL (v9.6 or later) before this directory.")
 endif()
 
 add_library(a2ui_lvgl STATIC ${A2UI_LVGL_SRCS})

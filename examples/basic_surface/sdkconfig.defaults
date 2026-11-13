@@ -5,7 +5,8 @@ CONFIG_COMPILER_CXX_EXCEPTIONS=n
 CONFIG_COMPILER_CXX_RTTI=n
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+# Message validation and node resolution recurse; the core asks for >= 16 KB.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=20480
 CONFIG_FREERTOS_HZ=1000
 
 # LVGL: allocate through malloc so large objects can land in PSRAM when the
