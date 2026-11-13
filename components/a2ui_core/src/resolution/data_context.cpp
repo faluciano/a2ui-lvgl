@@ -24,7 +24,7 @@ Error user_activation_required(const std::string& name) {
   return make_error(ErrorKind::Expression,
                     "Function '" + name +
                         "' requires user activation and cannot be evaluated without an active user gesture.",
-                    "USER_ACTIVATION_REQUIRED");
+                    "EXPRESSION_ERROR");
 }
 Error invalid_arguments(const std::string& name) {
   return make_error(ErrorKind::Validation,

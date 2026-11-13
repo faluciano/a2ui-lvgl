@@ -4,6 +4,6 @@ license: Apache-2.0
 url: https://github.com/a2ui-project/a2ui
 dependencies:
   idf: ">=5.4"
-  lvgl/lvgl: "^9.4"
+  lvgl/lvgl: "^9.6"
   a2ui_core:
     path: ../a2ui_core

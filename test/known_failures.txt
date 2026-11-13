@@ -1,0 +1,6 @@
+# Known conformance failures (case names). Reported as XFAIL; one that passes is flagged.
+
+# adapter_conformance: needs the RPC layer (callAgentFunction dispatch and agentFunctionResponse
+# routing, src/rpc on the parallel branch). Without an RpcHandler the agent function call is
+# refused locally, so no callAgentFunction envelope is emitted.
+agent_function_action_failure_reports_expression_error

@@ -1,16 +1,26 @@
 // Copyright 2026 The a2ui-lgvl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
-// A2UI basic surface example: parses an A2UI v1.0 message stream with the
-// a2ui_core JSON parser and shows it through the a2ui_lvgl adapter.
+// A2UI basic surface example: feeds an upstream A2UI v1.0 sample
+// (catalogs/basic/v1/examples/13_coffee-order.json, embedded at build time)
+// through the a2ui_core MessageProcessor and renders it with the a2ui_lvgl
+// adapter. Button actions are logged (they would go to the agent).
 //
 // The display is chosen in menuconfig ("A2UI basic surface example"):
 // an SPI ST7789/ILI9341 panel through esp_lcd, or a headless display whose
 // flush callback discards the pixels so the example runs on any board.
+//
+// Everything A2UI runs on the LVGL task's lock: the core and the adapter
+// are single-threaded, like LVGL.
 
 #include <cinttypes>
+#include <memory>
 
+#include "a2ui/basic_catalog.h"
+#include "a2ui/catalog.h"
 #include "a2ui/json.h"
+#include "a2ui/message_processor.h"
+#include "a2ui/spec_documents.h"
 #include "a2ui_lvgl/a2ui_lvgl.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
@@ -32,40 +42,15 @@
 #endif
 #endif
 
+// The embedded sample (EMBED_TXTFILES adds a terminating NUL).
+extern const char kSampleStart[] asm("_binary_13_coffee_order_json_start");
+
 namespace {
 
 constexpr const char* kTag = "a2ui_example";
 constexpr uint32_t kHres = CONFIG_A2UI_EXAMPLE_HRES;
 constexpr uint32_t kVres = CONFIG_A2UI_EXAMPLE_VRES;
 constexpr uint32_t kBufLines = 40;
-
-// Messages from third_party/a2ui/catalogs/basic/v1/examples/00_simple-text.json.
-constexpr char kSampleMessages[] = R"json({
-  "name": "Simple Text",
-  "description": "Simple example demonstrating basic catalog components.",
-  "messages": [
-    {
-      "version": "1.0",
-      "createSurface": {
-        "surfaceId": "gallery-simple-text",
-        "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
-      }
-    },
-    {
-      "version": "1.0",
-      "updateComponents": {
-        "surfaceId": "gallery-simple-text",
-        "components": [
-          {
-            "id": "root",
-            "component": "Text",
-            "text": "# Hello, Minimal Catalog!"
-          }
-        ]
-      }
-    }
-  ]
-})json";
 
 #if CONFIG_A2UI_EXAMPLE_DISPLAY_SPI
 
@@ -156,10 +141,75 @@ lv_display_t* add_headless_display() {
 
 #endif
 
+void log_heap(const char* when) {
+  ESP_LOGI(kTag, "%s: free heap %u bytes (internal %u, min ever %u)", when,
+           static_cast<unsigned>(esp_get_free_heap_size()),
+           static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+           static_cast<unsigned>(esp_get_minimum_free_heap_size()));
+}
+
+/** The A2UI side: processor, the rendered surface, and the action log. Lives forever. */
+struct App {
+  std::unique_ptr<a2ui::MessageProcessor> processor;
+  std::unique_ptr<a2ui_lvgl::Surface> surface;
+  a2ui::Subscription actions;
+  a2ui_lvgl::Theme theme = a2ui_lvgl::Theme::light();
+};
+
+App* start_a2ui(lv_display_t* disp) {
+  auto result = a2ui::Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
+  if (!result.ok()) {
+    ESP_LOGE(kTag, "basic catalog: %s", result.error().message.c_str());
+    return nullptr;
+  }
+  a2ui::CatalogPtr catalog = result.value();
+  a2ui::basic_catalog::bind_functions(*catalog);
+
+  auto* app = new App();
+  a2ui::MessageProcessorOptions options;
+  options.outbound_listener = [](const a2ui::Json& message) {
+    ESP_LOGW(kTag, "to agent: %s", message.dump().c_str());
+  };
+  app->processor = std::make_unique<a2ui::MessageProcessor>(std::vector<a2ui::CatalogPtr>{catalog}, options);
+  // Actions would be sent to the agent; here they are logged.
+  app->actions = app->processor->model().on_action().subscribe([](const a2ui::Json& action) {
+    ESP_LOGI(kTag, "action %s from %s: %s", action["name"].as_string().c_str(),
+             action["sourceComponentId"].as_string().c_str(), action["context"].dump().c_str());
+  });
+
+  a2ui::Json::ParseResult parsed = a2ui::Json::parse(kSampleStart);
+  if (!parsed.ok) {
+    ESP_LOGE(kTag, "sample JSON invalid at %u: %s", static_cast<unsigned>(parsed.offset), parsed.error.c_str());
+    return app;
+  }
+  a2ui::Status st = app->processor->process_messages(parsed.value["messages"]);
+  if (!st.ok()) ESP_LOGW(kTag, "sample: %s", st.error().message.c_str());
+
+  a2ui_lvgl::apply_lvgl_theme(disp, app->theme);
+  for (const auto& entry : app->processor->model().surfaces()) {
+    a2ui_lvgl::SurfaceConfig config;
+    config.registry = &a2ui_lvgl::basic_registry();
+    config.theme = &app->theme;
+    app->surface = std::make_unique<a2ui_lvgl::Surface>(*entry.second, lv_display_get_screen_active(disp), config);
+    ESP_LOGI(kTag, "rendering surface '%s'", entry.first.c_str());
+    break;
+  }
+  return app;
+}
+
+uint32_t count_views(a2ui_lvgl::NodeView* view) {
+  if (view == nullptr) return 0;
+  uint32_t n = 1;
+  for (a2ui_lvgl::NodeView* child : view->children()) n += count_views(child);
+  return n;
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
-  const lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+  lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+  // Event handlers run A2UI actions and bindings on the LVGL task.
+  port_cfg.task_stack = 16384;
   ESP_ERROR_CHECK(lvgl_port_init(&port_cfg));
 
 #if CONFIG_A2UI_EXAMPLE_DISPLAY_SPI
@@ -171,21 +221,13 @@ extern "C" void app_main(void) {
     ESP_LOGE(kTag, "display setup failed");
     return;
   }
-
-  a2ui::Json::ParseResult parsed = a2ui::Json::parse(kSampleMessages);
-  if (!parsed.ok) {
-    ESP_LOGE(kTag, "sample JSON invalid at %u: %s", static_cast<unsigned>(parsed.offset),
-             parsed.error.c_str());
-    return;
-  }
+  log_heap("before A2UI");
 
   if (!lvgl_port_lock(0)) return;
-  lv_obj_t* surface = a2ui::lvgl::render_placeholder(lv_display_get_screen_active(disp),
-                                                     parsed.value);
-  const uint32_t labels = lv_obj_get_child_count(surface);
+  App* app = start_a2ui(disp);
+  const uint32_t views = app && app->surface ? count_views(app->surface->root_view()) : 0;
   lvgl_port_unlock();
 
-  ESP_LOGI(kTag, "rendered %" PRIu32 " component(s); free heap %u bytes (internal %u)", labels,
-           static_cast<unsigned>(esp_get_free_heap_size()),
-           static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)));
+  ESP_LOGI(kTag, "rendered %" PRIu32 " component view(s)", views);
+  log_heap("after render");
 }

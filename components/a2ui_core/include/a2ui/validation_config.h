@@ -17,6 +17,14 @@ struct ValidationConfig {
   bool allow_missing_root = false;
   /** Unknown component types, undeclared properties and undeclared functions. */
   bool allow_unknown_elements = false;
+  /**
+   * Accept reference cycles (A -> B -> A) instead of rejecting the message.
+   * A rendering client sets this so a NodeResolver shows the cycle as a
+   * `cyclic` placeholder and reports CYCLIC_REFERENCE on the surface, as the
+   * adapter conformance suite expects. Self-references are still rejected.
+   * Not part of relaxed().
+   */
+  bool allow_cyclic_references = false;
   /** Component tree depth limit; unset means the global limit (50). */
   std::optional<int> max_depth;
 
@@ -34,7 +42,8 @@ struct ValidationConfig {
     return a.allow_orphan_components == b.allow_orphan_components &&
            a.allow_dangling_references == b.allow_dangling_references &&
            a.allow_missing_root == b.allow_missing_root &&
-           a.allow_unknown_elements == b.allow_unknown_elements && a.max_depth == b.max_depth;
+           a.allow_unknown_elements == b.allow_unknown_elements &&
+           a.allow_cyclic_references == b.allow_cyclic_references && a.max_depth == b.max_depth;
   }
   friend bool operator!=(const ValidationConfig& a, const ValidationConfig& b) { return !(a == b); }
 };

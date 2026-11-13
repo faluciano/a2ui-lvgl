@@ -1,36 +1,29 @@
 // Copyright 2026 The a2ui-lgvl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
-// LVGL framework adapter for the A2UI core.
+// LVGL framework adapter for the A2UI core: umbrella header.
 //
-// PLACEHOLDER: this header only exists so the component chain
-// (a2ui_core -> a2ui_lvgl -> lvgl -> app) compiles and links on host and
-// device. The real adapter replaces it.
+//   a2ui::MessageProcessor processor({catalog});
+//   processor.process_text(json);
+//   a2ui_lvgl::SurfaceConfig config;
+//   config.registry = &a2ui_lvgl::basic_registry();
+//   a2ui_lvgl::Surface view(*processor.model().get_surface("s"), lv_screen_active(), config);
+//
+// Layout of the component:
+//   surface.h        Surface host, fallbacks, services, config
+//   component.h      ComponentInstance (Form 4), registry, NodeView dispatcher
+//   theme.h          colours, fonts, spacing (v1.0 has no protocol theme)
+//   accessibility.h  accessibility seam (LVGL has no accessibility API)
+//   image_loader.h   application-provided image fetching
+//   markdown.h       the Markdown subset Text renders
+//   basic_catalog.h  basic catalog widgets
 
 #pragma once
 
-#include <string>
-#include <vector>
-
-#include "a2ui/json.h"
-#include "lvgl.h"
-
-namespace a2ui::lvgl {
-
-/**
- * Collects the `text` property of every component in the `updateComponents`
- * messages of `messages`. Accepts either a JSON array of A2UI messages or an
- * object with a `messages` array (the upstream example file format).
- */
-std::vector<std::string> collect_component_text(const Json& messages);
-
-/**
- * Creates a full-size vertical flex container under `parent` with one label
- * per entry in `lines`. Returns the container. Call with the LVGL lock held.
- */
-lv_obj_t* create_text_column(lv_obj_t* parent, const std::vector<std::string>& lines);
-
-/** collect_component_text() followed by create_text_column(). */
-lv_obj_t* render_placeholder(lv_obj_t* parent, const Json& messages);
-
-}  // namespace a2ui::lvgl
+#include "a2ui_lvgl/accessibility.h"
+#include "a2ui_lvgl/basic_catalog.h"
+#include "a2ui_lvgl/component.h"
+#include "a2ui_lvgl/image_loader.h"
+#include "a2ui_lvgl/markdown.h"
+#include "a2ui_lvgl/surface.h"
+#include "a2ui_lvgl/theme.h"

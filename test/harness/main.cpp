@@ -4,6 +4,7 @@
 // Conformance runner. Usage:
 //   conformance --repo-root third_party/a2ui --suites build/conformance/core
 //               [--suite <substr>] [--case <substr>] [--verbose]
+//               [--suite-file <path.json>]...   (run these files instead of --suites)
 //
 // Known failures are listed in test/known_failures.txt (one case name per
 // line, `#` comments). They are reported but do not fail the run; a known
@@ -76,6 +77,7 @@ int main(int argc, char** argv) {
   std::string suites_dir = "build/conformance/core";
   std::string suite_filter, case_filter;
   std::string known_path = "test/known_failures.txt";
+  std::vector<std::string> suite_files;
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
@@ -84,6 +86,7 @@ int main(int argc, char** argv) {
     else if (a == "--suite") suite_filter = next();
     else if (a == "--case") case_filter = next();
     else if (a == "--known-failures") known_path = next();
+    else if (a == "--suite-file") suite_files.push_back(next());
     else if (a == "--verbose") ctx.verbose = true;
     else {
       std::fprintf(stderr, "unknown argument %s\n", a.c_str());
@@ -103,7 +106,8 @@ int main(int argc, char** argv) {
   std::vector<std::string> failures, xpasses;
   std::map<std::string, int> missing_actions;
 
-  for (const auto& file : list_suites(suites_dir)) {
+  if (suite_files.empty()) suite_files = list_suites(suites_dir);
+  for (const auto& file : suite_files) {
     const std::string suite = basename_no_ext(file);
     if (!suite_filter.empty() && suite.find(suite_filter) == std::string::npos) continue;
     std::string err;

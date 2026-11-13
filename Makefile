@@ -3,7 +3,9 @@
 #   make            build the libraries and test binaries
 #   make test       run unit tests and the conformance suites
 #   make conformance SUITE=data_model   run one suite (substring match)
-#   make lvgl-smoke  build LVGL (third_party/lvgl) and run the LVGL smoke test
+#   make lvgl-smoke  build LVGL (third_party/lvgl) and run the LVGL adapter tests
+#   make adapter-conformance   run the framework adapter suites against a2ui_lvgl
+#   make renders     render catalogs/basic/v1/examples to build/renders/*.png
 #
 # The LVGL targets are part of `all` and `test` when the third_party/lvgl
 # submodule is checked out; the core library and harness never depend on it.
@@ -47,18 +49,29 @@ HAVE_LVGL := $(wildcard $(LVGL)/lvgl.h)
 
 ADAPTER_SRCS := $(shell find components/a2ui_lvgl/src -name '*.cpp' | sort)
 ADAPTER_OBJS := $(ADAPTER_SRCS:%.cpp=$(BUILD)/%.o)
-SMOKE_OBJS := $(BUILD)/test/lvgl/smoke_test.o
+LVGL_ENV_OBJ := $(BUILD)/test/lvgl/lvgl_env.o
+SMOKE_OBJS := $(BUILD)/test/lvgl/smoke_test.o $(LVGL_ENV_OBJ)
+# The adapter conformance runner shares the harness plumbing (not the core suites).
+ADAPTER_CONF_OBJS := $(BUILD)/test/lvgl/adapter_suite.o $(LVGL_ENV_OBJ) \
+	$(BUILD)/test/harness/harness.o $(BUILD)/test/harness/main.o
+RENDER_OBJS := $(BUILD)/tools/render_sample/render_sample.o $(BUILD)/tools/render_sample/png_writer.o $(LVGL_ENV_OBJ)
+ADAPTER_SUITES := build/conformance/core/adapter_conformance.json build/conformance/core/accessibility.json \
+	build/conformance/adapter/markdown_subset.json
+EXAMPLES := $(wildcard $(UPSTREAM)/catalogs/basic/v1/examples/*.json)
 
 $(ADAPTER_OBJS): LIB_CXXFLAGS += -Icomponents/a2ui_lvgl/include $(LVGL_INC)
-$(SMOKE_OBJS): TEST_CXXFLAGS += -Icomponents/a2ui_lvgl/include $(LVGL_INC)
+$(BUILD)/test/lvgl/%.o: TEST_CXXFLAGS += -Icomponents/a2ui_lvgl/include -Icomponents/a2ui_lvgl/src $(LVGL_INC)
+$(BUILD)/tools/%.o: TEST_CXXFLAGS += -Icomponents/a2ui_lvgl/include -Itest/lvgl $(LVGL_INC)
 
 SUITE_YAML := $(wildcard $(UPSTREAM)/conformance/core/*.yaml)
 SUITE_JSON := $(SUITE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.json)
 # Fixtures the node_resolution suite names (test_data/node/*.yaml).
 FIXTURE_YAML := $(wildcard $(UPSTREAM)/conformance/test_data/node/*.yaml)
 SUITE_JSON += $(FIXTURE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.json)
+# Adapter-only suites outside core/.
+SUITE_JSON += build/conformance/adapter/markdown_subset.json
 
-.PHONY: all test unit conformance suites lvgl lvgl-smoke clean
+.PHONY: all test unit conformance suites lvgl lvgl-smoke adapter-conformance renders clean
 
 all: $(BUILD)/libA2uiCore.a $(BUILD)/unit_tests $(BUILD)/conformance suites $(if $(HAVE_LVGL),lvgl)
 
@@ -67,6 +80,10 @@ $(BUILD)/components/%.o: components/%.cpp
 	$(CXX) $(LIB_CXXFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD)/test/%.o: test/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(TEST_CXXFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/tools/%.o: tools/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(TEST_CXXFLAGS) -MMD -MP -c $< -o $@
 
@@ -83,6 +100,12 @@ $(BUILD)/libA2uiLvgl.a: $(ADAPTER_OBJS)
 	ar rcs $@ $^
 
 $(BUILD)/lvgl_smoke_test: $(SMOKE_OBJS) $(BUILD)/libA2uiLvgl.a $(BUILD)/libA2uiCore.a $(BUILD)/liblvgl.a
+	$(CXX) $^ $(LDFLAGS) -o $@
+
+$(BUILD)/adapter_conformance: $(ADAPTER_CONF_OBJS) $(BUILD)/libA2uiLvgl.a $(BUILD)/libA2uiCore.a $(BUILD)/liblvgl.a
+	$(CXX) $^ $(LDFLAGS) -o $@
+
+$(BUILD)/render_sample: $(RENDER_OBJS) $(BUILD)/libA2uiLvgl.a $(BUILD)/libA2uiCore.a $(BUILD)/liblvgl.a
 	$(CXX) $^ $(LDFLAGS) -o $@
 
 $(BUILD)/libA2uiCore.a: $(CORE_OBJS)
@@ -107,13 +130,25 @@ unit: $(BUILD)/unit_tests suites
 conformance: $(BUILD)/conformance suites
 	$(BUILD)/conformance --repo-root $(UPSTREAM) --suites build/conformance/core $(if $(SUITE),--suite $(SUITE)) $(if $(CASE),--case $(CASE)) $(if $(VERBOSE),--verbose)
 
-lvgl: $(BUILD)/lvgl_smoke_test
+lvgl: $(BUILD)/lvgl_smoke_test $(BUILD)/adapter_conformance $(BUILD)/render_sample
 
 lvgl-smoke: $(BUILD)/lvgl_smoke_test
 	$(BUILD)/lvgl_smoke_test
 
+adapter-conformance: $(BUILD)/adapter_conformance $(ADAPTER_SUITES)
+	$(BUILD)/adapter_conformance --repo-root $(UPSTREAM) $(foreach f,$(ADAPTER_SUITES),--suite-file $(f)) \
+		$(if $(CASE),--case $(CASE)) $(if $(VERBOSE),--verbose)
+
+# One PNG per basic catalog example (480x800), for humans to look at.
+renders: $(BUILD)/render_sample
+	@mkdir -p build/renders
+	@for f in $(EXAMPLES); do \
+		$(BUILD)/render_sample $$f build/renders/$$(basename $$f .json).png >/dev/null || exit 1; \
+	done
+	@echo "rendered $(words $(EXAMPLES)) examples into build/renders/"
+
 ifneq ($(HAVE_LVGL),)
-test: unit conformance lvgl-smoke
+test: unit conformance lvgl-smoke adapter-conformance
 else
 test: unit conformance
 	@echo "note: $(LVGL) not checked out; skipping the LVGL smoke test"
@@ -123,4 +158,4 @@ clean:
 	rm -rf build
 
 -include $(CORE_OBJS:.o=.d) $(HARNESS_OBJS:.o=.d) $(UNIT_OBJS:.o=.d)
--include $(LVGL_OBJS:.o=.d) $(ADAPTER_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d)
+-include $(LVGL_OBJS:.o=.d) $(ADAPTER_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d) $(ADAPTER_CONF_OBJS:.o=.d) $(RENDER_OBJS:.o=.d)
