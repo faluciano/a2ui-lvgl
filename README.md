@@ -64,6 +64,25 @@ a2ui_lvgl::Surface view(*processor.model().get_surface("main"), lv_screen_active
 processor.model().on_action().subscribe([](const a2ui::Json& a) { /* send to agent */ });
 ```
 
+Wire the transport and the clock in your LVGL task loop:
+
+```cpp
+a2ui::MessageProcessorOptions options;
+options.outbound_listener = [](const a2ui::Json& envelope) {
+  send_to_agent(envelope.dump());  // callAgentFunction, rendererFunctionResponse, error
+};
+a2ui::MessageProcessor processor({basic_catalog}, std::move(options));
+
+for (;;) {
+  processor.tick(esp_timer_get_time() / 1000);  // Agent call timeouts (default 30 s).
+  lv_timer_handler();
+  // processor.process_text(...) for each framed message from the transport.
+}
+```
+
+Without an outbound listener, functions the renderer cannot run locally fail
+instead of being sent to the agent. Without `tick()`, agent calls never time out.
+
 Call everything from the LVGL task (or with the LVGL lock held). `Surface`
 owns a `NodeResolver`, renders its root node and tears down when destroyed,
 when the surface is deleted (`deleteSurface`), or when its container is
