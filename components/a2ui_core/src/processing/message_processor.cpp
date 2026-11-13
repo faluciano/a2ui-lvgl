@@ -166,16 +166,30 @@ MessageProcessor::MessageProcessor(std::vector<CatalogPtr> catalogs, MessageProc
     : validation_config_(options.validation_config),
       outbound_(std::move(options.outbound_listener)),
       adapters_(options.adapters ? std::move(options.adapters) : VersionAdapterRegistry::make_default()),
-      rpc_(options.rpc) {
+      rpc_(std::make_unique<RpcHandler>(std::vector<CatalogPtr>{}, std::move(options.rpc))) {
   for (auto& c : catalogs) {
     if (!c) continue;
     bool dup = false;
     for (const auto& k : catalogs_) dup = dup || k->id() == c->id();
     if (!dup) catalogs_.push_back(std::move(c));
   }
+  rpc_->set_catalogs(catalogs_);
+  rpc_->set_outbound_listener(outbound_);
 }
 
-MessageProcessor::~MessageProcessor() { dispose(); }
+void MessageProcessor::set_outbound_listener(OutboundListener listener) {
+  outbound_ = std::move(listener);
+  if (!rpc_->disposed()) rpc_->set_outbound_listener(outbound_);
+}
+
+MessageProcessor::~MessageProcessor() {
+  // Surfaces go first; pending agent calls are then dropped by ~RpcHandler
+  // without calling back into a host that is being torn down.
+  if (!disposed_) {
+    disposed_ = true;
+    model_.dispose();
+  }
+}
 
 CatalogPtr MessageProcessor::find_catalog(std::string_view id) const {
   for (const auto& c : catalogs_) {
@@ -255,20 +269,18 @@ Status MessageProcessor::run_operation(const InternalOperation& op, CallState& c
     case T::UpdateDataModel: return update_data_model(op);
     case T::DeleteSurface:
       if (model_.get_surface(op.surface_id)) {
+        // The surface goes first, so its pending calls settle into nothing.
         model_.delete_surface(op.surface_id);
-        if (rpc_) rpc_->cancel_surface_calls(op.surface_id);
+        rpc_->cancel_surface_calls(op.surface_id);
       }
       return ok_status();
-    case T::CallRendererFunction:
-      if (rpc_) {
-        SurfaceModel* surface = op.surface_id.empty() ? nullptr : model_.get_surface(op.surface_id);
-        InternalOperation forwarded = op;
-        forwarded.user_activated = op.user_activated || call.user_activated;
-        rpc_->handle_call_renderer_function(forwarded, surface, *this);
-      }
+    case T::CallRendererFunction: {
+      SurfaceModel* surface = op.surface_id.empty() ? nullptr : model_.get_surface(op.surface_id);
+      rpc_->handle_call_renderer_function(op, surface, op.user_activated || call.user_activated);
       return ok_status();
+    }
     case T::AgentFunctionResponse:
-      if (rpc_) rpc_->handle_agent_function_response(op, *this);
+      rpc_->handle_agent_function_response(op);
       return ok_status();
   }
   return ok_status();
@@ -309,6 +321,9 @@ Status MessageProcessor::create_surface(const InternalOperation& op, CallState& 
   if (op.root) options.root_id = *op.root;
   auto owned = std::make_unique<SurfaceModel>(sid, surface_catalog, std::move(available), std::move(options));
   SurfaceModel* surface = owned.get();
+  // v1.0 fallback routing: calls the renderer cannot run go to the agent
+  // while the processor has an outbound listener.
+  if (surface->is_v1()) surface->set_agent_function_caller(rpc_.get());
   A2UI_RETURN_IF_ERROR(model_.add_surface(std::move(owned)));
 
   // The data model first, one write per top-level key (blueprint
@@ -821,7 +836,7 @@ void MessageProcessor::dispose() {
   if (disposed_) return;
   disposed_ = true;
   model_.dispose();
-  if (rpc_) rpc_->dispose();
+  rpc_->dispose();
   on_error_.clear();
 }
 

@@ -1,0 +1,8 @@
+
+# agent_function_routing: the suite gives this rule two variants and each core
+# runs the one that fits how it re-evaluates (conformance/README.md, "Writing
+# cases for route_agent_function"). DataModel::set skips a write of an equal
+# value without notifying, so the binding does not re-evaluate here; the rule
+# is covered by test_agent_routing_cancelled_call_is_sent_again_on_unrelated_change
+# (as in the Python and Swift cores).
+test_agent_routing_cancelled_call_is_sent_again_when_its_value_is_rewritten

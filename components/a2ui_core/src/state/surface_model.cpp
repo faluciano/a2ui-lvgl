@@ -59,7 +59,7 @@ std::string iso8601_utc(double seconds) {
 #else
   gmtime_r(&t, &tm);
 #endif
-  char buf[40];
+  char buf[80];  // Room for any int fields, so GCC sees no truncation (-Wformat-truncation).
   std::snprintf(buf, sizeof buf, "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", tm.tm_year + 1900, tm.tm_mon + 1,
                 tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, ms);
   return buf;
@@ -279,11 +279,6 @@ Status SurfaceModel::validate_function_args(const FunctionApi& api, const Json& 
   return ok_status();
 }
 
-bool SurfaceModel::agent_function_value(const std::string& name, const std::string& catalog_id, const Json& args,
-                                        Json* value) {
-  return agent_handler_ ? agent_handler_(name, catalog_id, args, value) : false;
-}
-
 Status SurfaceModel::open_url(const std::string& url) {
   if (url_handler_) return url_handler_(url);
   return ok_status();  // Headless: the request is accepted and dropped.
@@ -292,7 +287,11 @@ Status SurfaceModel::open_url(const std::string& url) {
 void SurfaceModel::dispose() {
   if (disposed_) return;
   disposed_ = true;
-  agent_handler_ = nullptr;
+  // Agent calls that settle from now on are ignored and report nothing.
+  alive_.reset();
+  agent_caller_ = nullptr;
+  agent_cache_.clear();
+  on_agent_call_settled_.clear();
   url_handler_ = nullptr;
   data_model_.dispose();
   components_.dispose();

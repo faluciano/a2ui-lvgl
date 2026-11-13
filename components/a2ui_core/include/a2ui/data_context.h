@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -23,6 +24,13 @@
 #include "a2ui/json.h"
 
 namespace a2ui {
+
+/** Where an agent call routed from an evaluation stands. */
+enum class AgentCallStatus : uint8_t {
+  Answered,  // The value is available.
+  Pending,   // Sent (or shared), awaiting the agent; the evaluation is deferred.
+  Failed,    // Failed earlier and already reported; the evaluation fails silently.
+};
 
 /** What a DataContext needs from its surface (or a test fixture). */
 class FunctionHost {
@@ -48,14 +56,15 @@ class FunctionHost {
   }
 
   /**
-   * Agent routing for calls with no local implementation. Return true and
-   * set `*value` when a result is available; return false while pending.
-   * `routes_to_agent` false means such calls fail locally.
+   * Agent routing for calls with no local implementation (v1.0 fallback
+   * routing). `routes_to_agent` false means such calls fail locally. Set
+   * `*value` when returning Answered. A host that cannot send the call
+   * reports why and returns Failed.
    */
   virtual bool routes_to_agent() const { return false; }
-  virtual bool agent_function_value(const std::string& name, const std::string& catalog_id,
-                                    const Json& args, Json* value) {
-    return false;
+  virtual AgentCallStatus agent_function_value(const std::string& name, const std::string& catalog_id,
+                                               const Json& args, Json* value) {
+    return AgentCallStatus::Pending;
   }
 
   /** openUrl side effect. */
@@ -99,10 +108,19 @@ class DataContext : public FunctionContext {
   bool had_failure() const { return failed_; }
   /** A call is waiting on the agent since the last reset. */
   bool had_deferred() const { return deferred_; }
+  /**
+   * A function did not run because one of its arguments waits on the agent
+   * (as opposed to the evaluated call itself being the one sent).
+   */
+  bool had_deferred_arguments() const { return deferred_arguments_; }
   void reset_flags() {
     failed_ = false;
     deferred_ = false;
+    deferred_arguments_ = false;
   }
+
+  /** Sets the catalog a running function resolved to (RPC execution of an agent-initiated call). */
+  void set_active_catalog_id(std::string id) { active_catalog_id_ = std::move(id); }
 
   DataModel& model() const { return *model_; }
   FunctionHost* host() const { return host_; }
@@ -126,6 +144,7 @@ class DataContext : public FunctionContext {
   int running_function_depth_ = 0;
   bool failed_ = false;
   bool deferred_ = false;
+  bool deferred_arguments_ = false;
   std::vector<std::string>* deps_ = nullptr;
 };
 
