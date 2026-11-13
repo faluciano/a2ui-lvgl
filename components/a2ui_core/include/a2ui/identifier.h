@@ -24,7 +24,10 @@ bool is_uax31_identifier(std::string_view utf8);
  */
 uint32_t decode_utf8(std::string_view s, size_t& pos);
 
-/** Number of code points in a UTF-8 string. */
+/** True if `s` is well-formed UTF-8 (no overlongs, surrogates or truncation). */
+bool utf8_valid(std::string_view s);
+
+/** Number of code points in a UTF-8 string (each malformed byte counts as one). */
 size_t utf8_length(std::string_view s);
 
 }  // namespace a2ui
