@@ -34,11 +34,21 @@ class Pattern {
 
   /**
    * Parses and safety-checks a pattern. Unsupported syntax and patterns that
-   * break the dialect's safety rules fail with ErrorKind::Expression.
+   * break the dialect's safety rules fail with ErrorKind::Expression; the
+   * message carries the reason token (UNSUPPORTED_SYNTAX, PATTERN_TOO_LONG,
+   * NESTED_QUANTIFIER, OVERLAPPING_ALTERNATION or ADJACENT_OVERLAP).
+   *
+   * Two device limits go beyond the other SDKs: a pattern whose counted
+   * repetitions expand past 4096 VM instructions is PATTERN_TOO_LONG, and
+   * lookaheads nested more than 16 deep are UNSUPPORTED_SYNTAX.
    */
   static Result<Pattern> compile(std::string_view pattern);
 
-  /** Search semantics: true if any substring of `value` (UTF-8) matches. */
+  /**
+   * Search semantics (RegExp.prototype.test): true if any substring of
+   * `value` (UTF-8) matches. A value longer than kMaxValueCodePoints never
+   * matches. Malformed UTF-8 is read as U+FFFD, one per bad byte.
+   */
   bool search(std::string_view value) const;
 
  private:

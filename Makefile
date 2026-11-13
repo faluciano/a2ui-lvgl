@@ -63,7 +63,7 @@ build/conformance/%.json: $(UPSTREAM)/conformance/%.yaml tools/yaml2json.py
 
 suites: $(SUITE_JSON)
 
-unit: $(BUILD)/unit_tests
+unit: $(BUILD)/unit_tests suites
 	$(BUILD)/unit_tests
 
 conformance: $(BUILD)/conformance suites
