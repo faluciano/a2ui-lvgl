@@ -336,8 +336,8 @@ class Parser {
 
   static std::string bound_message(const char* which, uint32_t v) {
     char buf[80];
-    std::snprintf(buf, sizeof(buf), "Quantifier %s bound %u exceeds %u", which, v,
-                  kMaxQuantifierBound);
+    std::snprintf(buf, sizeof(buf), "Quantifier %s bound %lu exceeds %lu", which,
+                  static_cast<unsigned long>(v), static_cast<unsigned long>(kMaxQuantifierBound));
     return buf;
   }
 
