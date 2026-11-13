@@ -49,6 +49,12 @@ void Catalog::add_function(FunctionDecl decl) {
 }
 
 void Catalog::add_component(ComponentApi api) {
+  if (api.child_refs.empty() && api.schema.is_object()) {
+    api.child_refs = catalog_internal::analyze_child_refs(api.schema, source_);
+  }
+  if (api.schema.is_object() && api.custom_envelope_properties.empty() && !api.checkable) {
+    catalog_internal::analyze_envelope(api.schema, source_, &api);
+  }
   for (auto& c : components_) {
     if (c.name == api.name) {
       c = std::move(api);
@@ -124,7 +130,13 @@ const Json* Catalog::resolve_catalog_pointer(std::string_view pointer) const {
       return resolve_json_pointer(f->api.schema, rest);
     }
   }
-  return resolve_json_pointer(source_, pointer);
+  if (const Json* j = resolve_json_pointer(source_, pointer)) return j;
+  // A local "#/$defs/X" the catalog does not define names the common type X
+  // (the other SDKs bundle common types into the catalog's $defs).
+  if (pointer.rfind("/$defs/", 0) == 0) {
+    if (auto common = spec::common_types(protocol_version_)) return resolve_json_pointer(*common, pointer);
+  }
+  return nullptr;
 }
 
 SchemaRegistry Catalog::schema_registry() const {

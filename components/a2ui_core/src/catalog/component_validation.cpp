@@ -70,6 +70,10 @@ class Checker {
   Checker(const Catalog& catalog, const ComponentValidationOptions& opt)
       : catalog_(catalog), opt_(opt), reg_(catalog.schema_registry()) {
     reg_.add_override("common_types.json#/$defs/FunctionCall", function_call_envelope());
+    // A catalog-local "#/$defs/FunctionCall" the catalog leaves undefined is the common one.
+    if (!catalog.source()["$defs"].contains("FunctionCall")) {
+      reg_.add_override("catalog.json#/$defs/FunctionCall", function_call_envelope());
+    }
   }
 
   std::vector<ValidationIssue> issues;
@@ -204,6 +208,10 @@ class Checker {
       }
       return;
     }
+    if (!is_uax31_identifier(name)) {
+      issue(path + "/@call", "identifier", "Function name '" + name + "' must be a valid UAX #31 identifier");
+      return;
+    }
     const Json* cat = call.find("catalogId");
     bool full;
     if (cat && !cat->is_string()) {
@@ -267,7 +275,7 @@ Status validate_component_properties(const Catalog& catalog, const ComponentApi&
   const Json* subject = &component;
   Json renamed;
   for (const char* bare : {"catalogId", "accessibility", "metadata", "checks"}) {
-    if (!component.contains(bare) || api.property_kinds.count(bare)) continue;
+    if (!component.contains(bare) || api.declares_custom(bare)) continue;
     const std::string at = std::string("@") + bare;
     if (component.contains(at)) {
       c.issue("/" + std::string(bare), "envelope",
@@ -285,7 +293,20 @@ Status validate_component_properties(const Catalog& catalog, const ComponentApi&
 
   Json all = Json::array({Json::object({{"$ref", Json("common_types.json#/$defs/ComponentCommon")}})});
   if (!api.schema.is_undefined()) {
-    all.push_back(Json::object({{"$ref", Json("catalog.json#/components/" + escape_pointer_token(api.name))}}));
+    const Json& closed = api.schema["additionalProperties"];
+    if (!closed.is_undefined() && !(closed.is_bool() && closed.as_bool())) {
+      // A closed component schema still admits the envelope keys, which the
+      // other SDKs strip before checking the component schema.
+      Json patched = api.schema;
+      Json p = patched["properties"].is_object() ? patched["properties"] : Json::object();
+      for (const char* k : {"id", "component", "@catalogId", "@metadata", "@accessibility", "@checks"}) {
+        if (!p.contains(k)) p.set(k, Json(true));
+      }
+      patched.set("properties", std::move(p));
+      all.push_back(std::move(patched));
+    } else {
+      all.push_back(Json::object({{"$ref", Json("catalog.json#/components/" + escape_pointer_token(api.name))}}));
+    }
   }
   all.push_back(Json::object(
       {{"properties", Json::object({{"component", Json::object({{"type", Json("string")}})}})},
