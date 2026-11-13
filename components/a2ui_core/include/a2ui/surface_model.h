@@ -138,6 +138,11 @@ class SurfaceModel : public FunctionHost {
   void set_url_handler(UrlHandler handler) { url_handler_ = std::move(handler); }
 
   bool disposed() const { return disposed_; }
+  /**
+   * Fires once, at the start of dispose(), while the components and data
+   * model are still intact (a NodeResolver tears its tree down here).
+   */
+  const EventSource<>& on_disposed() const { return on_disposed_; }
   void dispose();
 
   // FunctionHost
@@ -164,6 +169,7 @@ class SurfaceModel : public FunctionHost {
   EventSource<Json> on_action_;
   EventSource<Json> on_error_;
   EventSource<Error> on_function_error_;
+  EventSource<> on_disposed_;
   AgentFunctionHandler agent_handler_;
   UrlHandler url_handler_;
   std::function<double()> clock_;

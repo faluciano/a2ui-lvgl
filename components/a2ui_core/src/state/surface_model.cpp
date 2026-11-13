@@ -294,6 +294,8 @@ Status SurfaceModel::open_url(const std::string& url) {
 void SurfaceModel::dispose() {
   if (disposed_) return;
   disposed_ = true;
+  on_disposed_.emit();
+  on_disposed_.clear();
   agent_handler_ = nullptr;
   url_handler_ = nullptr;
   data_model_.dispose();

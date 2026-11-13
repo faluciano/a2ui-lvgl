@@ -24,7 +24,7 @@ struct Outcome {
   Kind kind = kPass;
   std::string detail;
 
-  static Outcome pass() { return {}; }
+  static Outcome pass(std::string note = {}) { return {kPass, std::move(note)}; }
   static Outcome fail(std::string why) { return {kFail, std::move(why)}; }
   static Outcome unsupported(std::string why) { return {kUnsupported, std::move(why)}; }
   bool passed() const { return kind == kPass; }
@@ -33,11 +33,19 @@ struct Outcome {
 struct Context {
   std::string repo_root;         // Upstream repo root (third_party/a2ui).
   std::string conformance_root;  // <repo_root>/conformance
+  /** Where the build put JSON conversions of conformance YAML (build/conformance). */
+  std::string converted_root = "build/conformance";
   bool verbose = false;
 
   std::string repo_path(const std::string& rel) const { return repo_root + "/" + rel; }
   std::string conformance_path(const std::string& rel) const {
     return conformance_root + "/" + rel;
+  }
+  /** The JSON conversion of a YAML file under conformance/ ("test_data/node/x.yaml"). */
+  std::string converted_path(const std::string& rel_yaml) const {
+    std::string rel = rel_yaml;
+    if (rel.size() > 5 && rel.compare(rel.size() - 5, 5, ".yaml") == 0) rel.replace(rel.size() - 5, 5, ".json");
+    return converted_root + "/" + rel;
   }
 };
 

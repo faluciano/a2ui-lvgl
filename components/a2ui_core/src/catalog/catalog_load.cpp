@@ -478,6 +478,42 @@ PropertyKind classify_property(const ClassifyCtx& ctx, const Json& prop, bool in
   return PropertyKind::Static;
 }
 
+// Collects the declared properties of an object schema (following $ref and
+// allOf/anyOf/oneOf) and classifies each.
+void collect_object_kinds(const ClassifyCtx& ctx, const Json& schema, bool in_common, int depth,
+                          std::map<std::string, PropertyKind>* out) {
+  if (!schema.is_object() || depth > 8) return;
+  for (const auto& m : schema["properties"].as_object()) {
+    auto it = out->find(m.first);
+    if (it != out->end() && it->second != PropertyKind::Static) continue;
+    (*out)[m.first] = classify_property(ctx, m.second, in_common, 0);
+  }
+  if (const Json& ref = schema["$ref"]; ref.is_string()) {
+    bool c = in_common;
+    if (const Json* t = follow_ref(ctx, ref.as_string(), &c, nullptr)) {
+      collect_object_kinds(ctx, *t, c, depth + 1, out);
+    }
+  }
+  for (const char* kw : {"allOf", "anyOf", "oneOf"}) {
+    for (const auto& member : schema[kw].as_array()) collect_object_kinds(ctx, member, in_common, depth + 1, out);
+  }
+}
+
+// The inner property kinds of a Static property: its own declared
+// properties, or those of its array items.
+void collect_nested_kinds(const ClassifyCtx& ctx, const Json& prop, bool in_common, int depth,
+                          std::map<std::string, PropertyKind>* out) {
+  if (!prop.is_object() || depth > 8) return;
+  collect_object_kinds(ctx, prop, in_common, depth, out);
+  if (const Json& items = prop["items"]; items.is_object()) collect_object_kinds(ctx, items, in_common, depth + 1, out);
+  if (const Json& ref = prop["$ref"]; ref.is_string()) {
+    bool c = in_common;
+    if (const Json* t = follow_ref(ctx, ref.as_string(), &c, nullptr)) {
+      if (const Json& items = (*t)["items"]; items.is_object()) collect_object_kinds(ctx, items, c, depth + 1, out);
+    }
+  }
+}
+
 void collect_shape(const ClassifyCtx& ctx, const Json& schema, bool in_common, int depth,
                    ComponentApi* api) {
   if (!schema.is_object() || depth > 8) return;
@@ -486,7 +522,15 @@ void collect_shape(const ClassifyCtx& ctx, const Json& schema, bool in_common, i
     if (api->property_kinds.count(m.first) && api->property_kinds[m.first] != PropertyKind::Static) {
       continue;  // The first declaration that binds wins (component before mixin).
     }
-    api->property_kinds[m.first] = classify_property(ctx, m.second, in_common, 0);
+    const PropertyKind kind = classify_property(ctx, m.second, in_common, 0);
+    api->property_kinds[m.first] = kind;
+    if (kind == PropertyKind::Static) {
+      std::map<std::string, PropertyKind> inner;
+      collect_nested_kinds(ctx, m.second, in_common, 0, &inner);
+      bool any = false;
+      for (const auto& k : inner) any = any || k.second != PropertyKind::Static;
+      if (any) api->nested_kinds[m.first] = std::move(inner);
+    }
   }
   for (const auto& r : schema["required"].as_array()) {
     if (!r.is_string() || r.as_string() == "id" || r.as_string() == "component") continue;
