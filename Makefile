@@ -13,7 +13,7 @@ UV ?= $(shell command -v uv 2>/dev/null || echo $(HOME)/.local/bin/uv)
 BUILD := build/host
 UPSTREAM := third_party/a2ui
 
-SAN ?= -fsanitize=address,undefined -fno-omit-frame-pointer
+SAN ?= -fsanitize=address,undefined -fno-sanitize=vptr -fno-omit-frame-pointer
 OPT ?= -O1 -g
 WARN := -Wall -Wextra -Wno-unused-parameter
 
