@@ -1,9 +1,26 @@
 version: "0.1.0"
-description: LVGL adapter that renders A2UI v1.0 surfaces with LVGL widgets
+description: Renders A2UI v1.0 surfaces with LVGL 9 widgets - an agent describes the screen in JSON and the device draws it.
 license: Apache-2.0
-url: https://github.com/a2ui-project/a2ui
+url: https://github.com/faluciano/a2ui-lvgl
+repository: https://github.com/faluciano/a2ui-lvgl.git
+documentation: https://github.com/faluciano/a2ui-lvgl#readme
+issues: https://github.com/faluciano/a2ui-lvgl/issues
+tags:
+  - a2ui
+  - lvgl
+  - agent
+  - gui
+  - display
+targets:
+  - esp32
+  - esp32s3
+  - esp32c3
+  - esp32p4
+examples:
+  - path: ../../examples/basic_surface
 dependencies:
   idf: ">=5.4"
   lvgl/lvgl: "^9.6"
-  a2ui_core:
-    path: ../a2ui_core
+  faluciano/a2ui_core:
+    version: "0.1.0"
+    override_path: ../a2ui_core

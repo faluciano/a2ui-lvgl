@@ -1,0 +1,28 @@
+name: Bug report
+description: Something renders wrong, crashes or does not follow the A2UI specification
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: messages
+    attributes:
+      label: A2UI messages that reproduce it
+      description: The smallest JSON that shows the problem. `build/host/render_sample` output helps for rendering bugs.
+      render: json
+  - type: input
+    id: where
+    attributes:
+      label: Where it runs
+      description: Host, or the chip, board and display. ESP-IDF and LVGL versions.
+      placeholder: ESP32-S3-DevKitC-1 N16R8, ST7789 240x320, ESP-IDF v6.0.3, LVGL 9.6.0
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: a2ui-lvgl version or commit

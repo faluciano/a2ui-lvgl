@@ -1,4 +1,4 @@
-// Copyright 2026 The a2ui-lgvl Authors
+// Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // The processing layer (blueprint section B): version adapters that turn
@@ -120,6 +120,13 @@ struct MessageProcessorOptions {
   /** Validation rules; std::nullopt skips schema, composition and topology checks. */
   std::optional<ValidationConfig> validation_config = ValidationConfig::strict();
   OutboundListener outbound_listener;
+  /**
+   * When true, the outbound listener also receives every surface's actions
+   * as renderer-to-agent envelopes ({version, action}), so a host that only
+   * relays messages needs no other subscription. When false (the default),
+   * the host reads SurfaceGroupModel::on_action() and sends them itself.
+   */
+  bool forward_actions = false;
   /** Defaults to VersionAdapterRegistry::make_default(). */
   std::shared_ptr<VersionAdapterRegistry> adapters;
   /** Options of the processor's RpcHandler (default agent call timeout, clock). */
@@ -236,6 +243,7 @@ class MessageProcessor {
   std::unique_ptr<RpcHandler> rpc_;
   SurfaceGroupModel model_;
   EventSource<Json> on_error_;
+  Subscription action_forward_;
   bool disposed_ = false;
 };
 

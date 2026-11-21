@@ -1,4 +1,4 @@
-// Copyright 2026 The a2ui-lgvl Authors
+// Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // A JSON Schema (draft 2020-12) interpreter for the subset that the A2UI

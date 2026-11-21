@@ -1,0 +1,45 @@
+name: Release
+
+# Publishes both components to the ESP Component Registry when a version tag
+# (v0.1.0, v1.2.3, ...) is pushed. It needs a repository secret named
+# IDF_COMPONENT_API_TOKEN; without it the job reports that and does nothing.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  registry:
+    name: Publish to the ESP Component Registry
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      IDF_COMPONENT_API_TOKEN: ${{ secrets.IDF_COMPONENT_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the tag matches the component versions
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for manifest in components/a2ui_core/idf_component.yml components/a2ui_lvgl/idf_component.yml; do
+            version="$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$manifest")"
+            if [ "$version" != "$tag" ]; then
+              echo "::error file=$manifest::version is $version but the tag is $GITHUB_REF_NAME"
+              exit 1
+            fi
+          done
+      - name: Explain the skipped upload
+        if: env.IDF_COMPONENT_API_TOKEN == ''
+        run: echo "::notice::IDF_COMPONENT_API_TOKEN is not set, so nothing was uploaded."
+      # a2ui_core first: a2ui_lvgl depends on it.
+      - name: Upload the components
+        if: env.IDF_COMPONENT_API_TOKEN != ''
+        uses: espressif/upload-components-ci-action@v2
+        with:
+          namespace: faluciano
+          components: |
+            a2ui_core:components/a2ui_core
+            a2ui_lvgl:components/a2ui_lvgl
+          api_token: ${{ secrets.IDF_COMPONENT_API_TOKEN }}

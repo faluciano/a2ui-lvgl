@@ -1,4 +1,4 @@
-// Copyright 2026 The a2ui-lgvl Authors
+// Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // Check rule evaluation (blueprint features/node_resolution "Checks"; the

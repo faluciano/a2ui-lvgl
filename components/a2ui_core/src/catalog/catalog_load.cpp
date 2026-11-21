@@ -1,4 +1,4 @@
-// Copyright 2026 The a2ui-lgvl Authors
+// Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // Catalog::from_json: loading and load-time validation of a catalog

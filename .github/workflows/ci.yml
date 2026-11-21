@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host:
+    name: Host tests (GCC, ASan + UBSan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Unit tests and conformance suites
+        run: make -j"$(nproc)" test
+      - name: Render the upstream examples
+        run: make -j"$(nproc)" renders
+      - uses: actions/upload-artifact@v7
+        with:
+          name: renders
+          path: build/renders/*.png
+          if-no-files-found: error
+
+  host-clang:
+    name: Host tests (Clang, ASan + UBSan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Unit tests and conformance suites
+        run: make -j"$(nproc)" CC=clang CXX=clang++ test
+
+  cmake:
+    name: Plain CMake build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Configure
+        run: cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/cmake --parallel
+      - name: Render one example
+        run: |
+          build/cmake/render_sample \
+            third_party/a2ui/catalogs/basic/v1/examples/13_coffee-order.json \
+            build/cmake/coffee.png --size 320x400
+          test -s build/cmake/coffee.png
+
+  esp-idf:
+    name: ESP-IDF v6.0.3 (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: espressif/idf:v6.0.3
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32, esp32s3, esp32c3, esp32p4]
+    steps:
+      # No submodules: the components and the example build without them.
+      - uses: actions/checkout@v7
+      - name: Build the example
+        shell: bash
+        run: A2UI_FAIL_ON_WARNINGS=1 tools/build_examples.sh ${{ matrix.target }}
+      - name: Show the build log
+        if: failure()
+        shell: bash
+        run: tail -n 200 build/examples/*.log

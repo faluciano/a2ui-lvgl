@@ -1,138 +1,74 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# a2ui-lgvl
+# a2ui-lvgl
+
+[![CI](https://github.com/faluciano/a2ui-lvgl/actions/workflows/ci.yml/badge.svg)](https://github.com/faluciano/a2ui-lvgl/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![A2UI v1.0](https://img.shields.io/badge/A2UI-v1.0-4f46e5.svg)
+![LVGL 9.6](https://img.shields.io/badge/LVGL-9.6-4f46e5.svg)
 
 An [A2UI](https://github.com/a2ui-project/a2ui) v1.0 renderer for
-[LVGL](https://lvgl.io), aimed at the Espressif ESP32 family (ESP32, ESP32-S3,
-ESP32-C3, ESP32-P4). It is written in C++17 and builds without exceptions or
-RTTI. It follows the upstream A2UI renderer blueprints.
+[LVGL](https://lvgl.io) on microcontrollers. An AI agent describes a screen in
+JSON, and an ESP32 draws it with native LVGL widgets and sends the user's
+actions back. The firmware stays the same whatever the agent shows.
 
-**Status: work in progress.** The protocol core runs the upstream core
-conformance suites; the LVGL adapter renders the whole v1.0 basic catalog and
-runs the framework adapter suites (`adapter_conformance.yaml`,
-`accessibility.yaml`, `markdown_subset.yaml`) on a headless display.
+![Four A2UI example surfaces rendered by LVGL](docs/images/gallery.png)
 
-## Layout
+*Upstream A2UI examples drawn by this library with LVGL at 320x400, light and
+dark theme. These are host renders (`make renders`), not photos of a device.*
 
-| Path | Contents |
-| --- | --- |
-| `components/a2ui_core` | Protocol core: JSON, data model, expressions, catalogs, message processing, and the `NodeResolver` that turns a surface into a live tree of resolved `ComponentNode`s. No UI dependency. |
-| `components/a2ui_lvgl` | LVGL framework adapter: `Surface`, the `NodeView` dispatcher, component implementations (Form 4), the basic catalog widgets, theme, accessibility seam. Depends on `a2ui_core` and `lvgl` (v9.6+). |
-| `examples/basic_surface` | ESP-IDF app that renders an embedded A2UI sample with `esp_lvgl_port`. |
-| `test/unit`, `test/harness` | Host unit tests and the conformance harness. |
-| `test/lvgl` | Host `lv_conf.h`, adapter unit tests, and the adapter conformance runner. |
-| `tools/render_sample` | Host tool that renders an A2UI message file to a PNG through the adapter. |
-| `third_party/a2ui` | Upstream A2UI (submodule): spec, catalogs, conformance suites. |
-| `third_party/lvgl` | LVGL v9.6.0 (submodule), used only for host builds. |
+## Status
 
-Both components work as ESP-IDF components (`idf_component.yml`) and as plain
-CMake targets (`a2ui::core`, `a2ui::lvgl`) outside ESP-IDF. For the plain
-CMake build, add LVGL first so that the `lvgl` target exists.
+**Pre-release (0.1.0). Not yet run on real hardware.** Everything is tested on
+a Linux host against the upstream A2UI test suites, and the device build is
+compile-checked for four chips. Expect rough edges on a real board, and please
+[report what you find](https://github.com/faluciano/a2ui-lvgl/issues).
 
-## Host build and tests
+| Check | Result |
+|---|---|
+| A2UI core conformance (v1.0 cases) | 666 pass, 0 fail, 1 documented exception |
+| A2UI framework adapter conformance | 36 of 36 |
+| Unit tests | 98, plus 107 LVGL adapter checks |
+| ESP-IDF v6.0 builds | ESP32, ESP32-S3, ESP32-C3, ESP32-P4, no warnings |
 
-Requirements: GCC or Clang with AddressSanitizer, GNU make, and
-[uv](https://docs.astral.sh/uv/) (used to convert the YAML conformance suites).
+Details, including what is skipped and why, are in
+[docs/conformance.md](docs/conformance.md).
+
+## What you get
+
+- **`a2ui_core`**: the protocol in portable C++17, with no UI dependency. It
+  handles messages, the data model, catalogs and schema validation, data
+  binding, the 14 standard functions, and function calls between device and
+  agent. Number, currency and date formatting are built in for 16 locales, so
+  the device needs no ICU.
+- **`a2ui_lvgl`**: all 18 components of the A2UI basic catalog as LVGL 9
+  widgets, a theme, and hooks for images, an on-screen keyboard and
+  accessibility. You can replace any component with your own widget.
+- **`examples/basic_surface`**: an ESP-IDF app for SPI displays (ST7789,
+  ILI9341) or no display at all.
+
+Both libraries build without exceptions or RTTI and run on a single thread,
+the LVGL task.
+
+## Try it without hardware
+
+You need `git`, `make`, a C++17 compiler and [uv](https://docs.astral.sh/uv/)
+(used to convert the upstream YAML test suites).
 
 ```sh
-git submodule update --init third_party/a2ui third_party/lvgl
-make -j4          # libraries, unit tests, conformance runners, LVGL tests, render tool
-make test         # unit tests + core conformance + LVGL adapter tests + adapter conformance
-make conformance SUITE=data_model   # one core suite
-make lvgl-smoke   # LVGL adapter unit tests only
-make adapter-conformance CASE=modal VERBOSE=1   # framework adapter suites
-make renders      # every catalogs/basic/v1/examples/*.json -> build/renders/*.png
-build/host/render_sample sample.json out.png --size 320x480 --dark
+git clone --recurse-submodules --shallow-submodules https://github.com/faluciano/a2ui-lvgl.git
+cd a2ui-lvgl
+make test      # unit tests and the upstream conformance suites
+make renders   # draws every upstream example into build/renders/*.png
+build/host/render_sample my_surface.json out.png --size 320x240 --dark
 ```
 
-Known conformance failures are listed with their reasons in
-`test/known_failures.txt`.
+`render_sample` takes any file of A2UI v1.0 messages, so you can check what
+your agent's output looks like before you flash anything.
 
-Host builds use ASan and UBSan. The libraries are compiled with
-`-fno-exceptions -fno-rtti`, as they are on device. The core library and the
-conformance harness do not depend on LVGL. If `third_party/lvgl` is not
-checked out, `make test` skips the LVGL smoke test.
+## Use it on an ESP32
 
-## LVGL adapter
-
-```cpp
-a2ui::MessageProcessor processor({basic_catalog});
-processor.process_text(json);                       // from your transport
-a2ui_lvgl::SurfaceConfig config;
-config.registry = &a2ui_lvgl::basic_registry();     // or your own registry
-a2ui_lvgl::Surface view(*processor.model().get_surface("main"), lv_screen_active(), config);
-processor.model().on_action().subscribe([](const a2ui::Json& a) { /* send to agent */ });
-```
-
-Wire the transport and the clock in your LVGL task loop:
-
-```cpp
-a2ui::MessageProcessorOptions options;
-options.outbound_listener = [](const a2ui::Json& envelope) {
-  send_to_agent(envelope.dump());  // callAgentFunction, rendererFunctionResponse, error
-};
-a2ui::MessageProcessor processor({basic_catalog}, std::move(options));
-
-for (;;) {
-  processor.tick(esp_timer_get_time() / 1000);  // Agent call timeouts (default 30 s).
-  lv_timer_handler();
-  // processor.process_text(...) for each framed message from the transport.
-}
-```
-
-Without an outbound listener, functions the renderer cannot run locally fail
-instead of being sent to the agent. Without `tick()`, agent calls never time out.
-
-Call everything from the LVGL task (or with the LVGL lock held). `Surface`
-owns a `NodeResolver`, renders its root node and tears down when destroyed,
-when the surface is deleted (`deleteSurface`), or when its container is
-deleted from outside. Each node is a `NodeView` keyed by instance id: a
-reorder moves objects, a type change recreates them, and pending,
-unknown-type or cyclic nodes render nothing (no object, no layout slot)
-unless `SurfaceConfig::fallbacks` supplies a view.
-
-Components are `ComponentInstance` objects (blueprint Form 4: `mount`,
-`update`, `unmount`) created by a `ComponentRegistry` keyed by component
-type and, optionally, catalog id. `register_basic_components()` fills one
-with the basic catalog; replace any entry with your own widget.
-
-Presentation comes from `a2ui_lvgl::Theme` (colours, fonts, spacing; v1.0
-has no protocol theme). Leaf components and outlined containers carry a
-uniform margin, Row/Column/List none; text colour reaches `Text` and `Icon`
-through LVGL style inheritance; cards are outlined and transparent.
-
-Host hooks (`SurfaceConfig::services`): an `ImageLoader` for `Image`
-pixels, a text-focus hook to attach an on-screen `lv_keyboard`, a live-region
-announcer, and an icon glyph mapper. Accessibility attributes (explicit
-`@accessibility` over values inferred from visible text) are kept per view
-and read with `a2ui_lvgl::accessibility_of(lv_obj_t*)`; LVGL itself has no
-accessibility API.
-
-Microcontroller limitations:
-
-- `Video` and `AudioPlayer` render nothing (no media pipeline); register an
-  implementation of your own to show a poster or a player.
-- `Image` shows a placeholder box sized by its variant until the
-  application's `ImageLoader` delivers pixels; URLs are validated with the
-  catalog's media URL rules first.
-- `Text` renders a Markdown subset (headings, emphasis, code, lists,
-  quotes, links as text, images as alt text, raw HTML as text). Bold, italic
-  and code runs need the theme to provide those fonts; the built-in
-  Montserrat fonts have none, so the markers are stripped and the run uses
-  the body font. Glyphs outside the fonts' ranges (emoji, stars) show as
-  boxes.
-- `Icon` maps names to `LV_SYMBOL_*` glyphs with ASCII stand-ins; `svgPath`
-  icons draw a bullet.
-- `DateTimeInput` uses `lv_calendar` and hour/minute rollers; ISO 8601
-  zone designators are kept verbatim, never converted; `min`/`max` are not
-  enforced by the picker.
-- A Row cannot shrink its children (LVGL flex has no shrink), so long text
-  in a Row does not wrap; in a Column it does.
-
-## ESP-IDF example
-
-Requires ESP-IDF 5.4 or later (tested with v6.0.3). LVGL, `esp_lvgl_port` and
-panel drivers come from the component registry.
+Build the example (ESP-IDF 6.0; see [Requirements](#requirements)):
 
 ```sh
 cd examples/basic_surface
@@ -141,10 +77,153 @@ idf.py menuconfig   # "A2UI basic surface example": display, controller, pins
 idf.py build flash monitor
 ```
 
-The app renders `catalogs/basic/v1/examples/13_coffee-order.json` (embedded
-at build time) and logs button actions with `ESP_LOGI`.
+To use the libraries in your own project, add them to your
+`main/idf_component.yml`:
 
-The default display is an SPI ST7789 panel driven through `esp_lcd`. ILI9341
-is the other option. Choose "Headless" to render into RAM with a dummy flush,
-which runs on any board. Each target's PSRAM setting is in
-`sdkconfig.defaults.<target>`.
+```yaml
+dependencies:
+  lvgl/lvgl: "~9.6.0"
+  faluciano/a2ui_core:
+    git: https://github.com/faluciano/a2ui-lvgl.git
+    path: components/a2ui_core
+    version: v0.1.0
+  faluciano/a2ui_lvgl:
+    git: https://github.com/faluciano/a2ui-lvgl.git
+    path: components/a2ui_lvgl
+    version: v0.1.0
+```
+
+Then, from the LVGL task:
+
+```cpp
+#include "a2ui/basic_catalog.h"
+#include "a2ui/message_processor.h"
+#include "a2ui/spec_documents.h"
+#include "a2ui_lvgl/a2ui_lvgl.h"
+
+// The standard catalog, with its functions.
+auto catalog = a2ui::Catalog::from_json(
+    *a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1)).value();
+a2ui::basic_catalog::bind_functions(*catalog);
+
+// Every message for the agent goes out through your transport.
+a2ui::MessageProcessorOptions options;
+options.forward_actions = true;  // include the user's actions
+options.outbound_listener = [](const a2ui::Json& message) {
+  send_to_agent(message.dump());
+};
+a2ui::MessageProcessor processor({catalog}, std::move(options));
+
+// Feed each message that arrives from the agent.
+processor.process_text(json_from_agent);
+
+// Draw a surface once the agent has created it.
+a2ui_lvgl::SurfaceConfig config;
+config.registry = &a2ui_lvgl::basic_registry();
+a2ui_lvgl::Surface view(*processor.model().get_surface("main"),
+                        lv_screen_active(), config);
+
+for (;;) {
+  processor.tick(esp_timer_get_time() / 1000);  // agent call timeouts
+  lv_timer_handler();
+}
+```
+
+[docs/adapter.md](docs/adapter.md) covers the adapter in full: custom
+components, the theme, the image loader and the other hooks.
+
+### What you provide
+
+- **The connection to the agent.** The library takes and returns JSON text.
+  WebSocket, HTTP streaming, MQTT, BLE or a serial port all work. A ready-made
+  WebSocket transport is on the [roadmap](#roadmap).
+- **An image loader**, if you want `Image` components to show pixels.
+- **Fonts**, if you want bold, italic or glyphs beyond the built-in Montserrat.
+
+## Use it with plain CMake
+
+Outside ESP-IDF, add the repository and link the targets. `a2ui::lvgl` is
+defined when an `lvgl` target exists first.
+
+```cmake
+add_subdirectory(third_party/lvgl)        # your LVGL 9.6, with your lv_conf.h
+add_subdirectory(third_party/a2ui-lvgl)
+target_link_libraries(app PRIVATE a2ui::core a2ui::lvgl)
+```
+
+The core alone (`a2ui::core`) has no dependencies, so it also suits a renderer
+for a different UI toolkit. [docs/porting.md](docs/porting.md) lists what a
+new platform needs.
+
+## Requirements
+
+| | |
+|---|---|
+| A2UI | v1.0 messages and the v1.0 basic catalog. v0.8 and v0.9 are not supported. |
+| LVGL | 9.6 or later |
+| ESP-IDF | 6.0 (tested with v6.0.3). 5.4 and 5.5 are untested. |
+| Compiler | C++17 (GCC or Clang) |
+| Flash | About 1 MB for the example image; use a 1.5 MB or larger app partition |
+| RAM | See below |
+
+### Memory
+
+Measured on a 64-bit host, so the ESP32 figures should be roughly half. They
+are estimates until someone measures on a board.
+
+| What | 64-bit host | Estimate on ESP32 |
+|---|---|---|
+| Basic catalog, loaded once | 310 KB | about 150 KB |
+| One surface with its widget tree | 25 to 90 KB | about 15 to 50 KB |
+
+That fits an **ESP32-S3 or ESP32-P4 with PSRAM** comfortably. Chips without
+PSRAM (ESP32-C3, plain ESP32 modules) build but will be tight or run out of
+heap. A compact catalog for them is on the roadmap.
+
+## Limitations
+
+- `Video` and `AudioPlayer` render nothing. Register your own component to
+  show a poster or a player.
+- `Image` shows a placeholder until your image loader delivers pixels.
+- The built-in fonts have no bold or italic, and no emoji.
+- Long text inside a `Row` does not wrap (LVGL flex items do not shrink).
+- A regular expression with an unanchored lookahead, such as `(?=.*x)`, takes
+  time proportional to the square of the input length (inputs are capped at
+  4,096 characters).
+
+The full list is in [docs/adapter.md](docs/adapter.md#limitations).
+
+## Roadmap
+
+1. Run on real boards and publish measured memory and frame rates.
+2. A WebSocket transport and an end-to-end example with a sample agent.
+3. A compact, precompiled basic catalog for chips without PSRAM.
+4. An SDL desktop simulator.
+5. Publish both components to the ESP Component Registry.
+
+## Contributing
+
+Bug reports, board test results and pull requests are welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md). To report a security problem, see
+[SECURITY.md](SECURITY.md).
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `components/a2ui_core` | Protocol core. No dependencies. |
+| `components/a2ui_lvgl` | LVGL adapter. Depends on `a2ui_core` and LVGL. |
+| `examples/basic_surface` | ESP-IDF example app. |
+| `test/` | Unit tests, the conformance harness and the LVGL adapter tests. |
+| `tools/` | Host renderer, table generators and build scripts. |
+| `docs/` | Adapter guide, porting notes, conformance details. |
+| `third_party/a2ui` | Upstream A2UI (submodule): specification, catalogs, conformance suites. |
+| `third_party/lvgl` | LVGL v9.6.0 (submodule), used only for host builds. |
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+A2UI is a project of Google LLC and the A2UI authors. LVGL is a project of
+LVGL Kft. This is an independent community project, not affiliated with or
+endorsed by either.

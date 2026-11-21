@@ -1,4 +1,4 @@
-// Copyright 2026 The a2ui-lgvl Authors
+// Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // Tests for the A2UI regex engine. The pattern lists are ported from the

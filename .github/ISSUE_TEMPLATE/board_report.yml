@@ -1,0 +1,31 @@
+name: Board report
+description: Tell us how it runs on your hardware, working or not
+labels: [hardware]
+body:
+  - type: input
+    id: board
+    attributes:
+      label: Board and chip
+      placeholder: ESP32-S3-DevKitC-1 N16R8 (16 MB flash, 8 MB PSRAM)
+    validations:
+      required: true
+  - type: input
+    id: display
+    attributes:
+      label: Display, resolution and bus
+      placeholder: ST7789, 240x320, SPI at 40 MHz
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: ESP-IDF, LVGL and a2ui-lvgl versions
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Result
+      description: Did the example draw correctly? Free heap before and after (the example logs it), anything slow or wrong. A photo is welcome.
+    validations:
+      required: true

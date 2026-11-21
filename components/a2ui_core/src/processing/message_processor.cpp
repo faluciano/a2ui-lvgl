@@ -1,4 +1,4 @@
-// Copyright 2026 The a2ui-lgvl Authors
+// Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // MessageProcessor: applies InternalOperations to the state models after
@@ -175,6 +175,14 @@ MessageProcessor::MessageProcessor(std::vector<CatalogPtr> catalogs, MessageProc
   }
   rpc_->set_catalogs(catalogs_);
   rpc_->set_outbound_listener(outbound_);
+  if (options.forward_actions) {
+    action_forward_ = model_.on_action().subscribe([this](const Json& action) {
+      const SurfaceModel* surface = model_.get_surface(action["surfaceId"].as_string());
+      send_outbound(Json::object(
+          {{"version", Json(version_label(surface ? surface->protocol_version() : std::string()))},
+           {"action", action}}));
+    });
+  }
 }
 
 void MessageProcessor::set_outbound_listener(OutboundListener listener) {

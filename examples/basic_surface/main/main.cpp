@@ -1,10 +1,11 @@
-// Copyright 2026 The a2ui-lgvl Authors
+// Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
-// A2UI basic surface example: feeds an upstream A2UI v1.0 sample
-// (catalogs/basic/v1/examples/13_coffee-order.json, embedded at build time)
-// through the a2ui_core MessageProcessor and renders it with the a2ui_lvgl
-// adapter. Button actions are logged (they would go to the agent).
+// A2UI basic surface example: feeds an A2UI v1.0 sample (coffee_order.json,
+// a copy of the upstream catalogs/basic/v1/examples/13_coffee-order.json,
+// embedded at build time) through the a2ui_core MessageProcessor and renders
+// it with the a2ui_lvgl adapter. Button actions are logged (they would go to
+// the agent).
 //
 // The display is chosen in menuconfig ("A2UI basic surface example"):
 // an SPI ST7789/ILI9341 panel through esp_lcd, or a headless display whose
@@ -43,7 +44,7 @@
 #endif
 
 // The embedded sample (EMBED_TXTFILES adds a terminating NUL).
-extern const char kSampleStart[] asm("_binary_13_coffee_order_json_start");
+extern const char kSampleStart[] asm("_binary_coffee_order_json_start");
 
 namespace {
 

@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.png binary
+
+# Generated files: collapsed in diffs and left out of language statistics.
+components/a2ui_core/src/schema/spec_documents_data.cpp linguist-generated
+components/a2ui_core/src/locale/locale_tables.cpp linguist-generated
+components/a2ui_core/src/common/xid_tables.inc linguist-generated
+test/unit/locale_intl_golden.inc linguist-generated

@@ -1,4 +1,4 @@
-// Copyright 2026 The a2ui-lgvl Authors
+// Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // NodeResolver + RPC integration: a binding that calls an agent function
@@ -120,5 +120,35 @@ TEST(node_action_waits_for_agent_context_and_keeps_metadata) {
     EXPECT_EQ(actions[0]["name"], Json("greet"));
     EXPECT_EQ(actions[0]["context"]["msg"], Json("Hi Lin"));
     EXPECT_EQ(actions[0]["metadata"], metadata);
+  }
+}
+
+TEST(forward_actions_sends_action_envelopes_to_the_outbound_listener) {
+  std::vector<Json> outbound;
+  a2ui::MessageProcessorOptions opts;
+  opts.outbound_listener = [&outbound](const Json& m) { outbound.push_back(m); };
+  opts.forward_actions = true;
+  a2ui::MessageProcessor processor({catalog_with_agent_function()}, std::move(opts));
+
+  Json create = parse(R"({"version":"1.0","createSurface":{"surfaceId":"s","components":[
+      {"id":"root","component":"Button","child":"label","action":{"event":{"name":"order",
+        "context":{"size":{"@path":"/size"}}}}},
+      {"id":"label","component":"Text","text":"Order"}],"dataModel":{"size":"large"}}})");
+  create.find_mut("createSurface")->set("catalogId", a2ui::basic_catalog::kCatalogIdV1);
+  EXPECT_TRUE(processor.process_messages(create).ok());
+  a2ui::SurfaceModel* surface = processor.model().get_surface("s");
+  if (!surface) return;
+  a2ui::NodeResolver resolver(*surface);
+  EXPECT_EQ(outbound.size(), size_t(0));
+
+  EXPECT_TRUE(resolver.root()->invoke("action").ok());
+  EXPECT_EQ(outbound.size(), size_t(1));
+  if (outbound.size() == 1) {
+    EXPECT_EQ(outbound[0]["version"], Json("1.0"));
+    EXPECT_EQ(outbound[0]["action"]["name"], Json("order"));
+    EXPECT_EQ(outbound[0]["action"]["surfaceId"], Json("s"));
+    EXPECT_EQ(outbound[0]["action"]["context"]["size"], Json("large"));
+    // What goes out is a valid renderer-to-agent message.
+    EXPECT_EQ(outbound[0].as_object().size(), size_t(2));
   }
 }

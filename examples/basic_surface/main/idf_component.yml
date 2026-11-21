@@ -2,6 +2,9 @@ dependencies:
   idf: ">=5.4"
   lvgl/lvgl: "~9.6.0"
   espressif/esp_lvgl_port: "^2.9.0"
+  faluciano/a2ui_lvgl:
+    version: "*"
+    override_path: ../../../components/a2ui_lvgl
   espressif/esp_lcd_ili9341:
     version: "^2.1.0"
     rules:

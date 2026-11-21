@@ -1,0 +1,33 @@
+a2ui-lvgl
+Copyright 2026 The a2ui-lvgl Authors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes or is derived from the following third-party work.
+
+A2UI (https://github.com/a2ui-project/a2ui)
+  Copyright Google LLC and the A2UI authors. Apache License 2.0.
+  - The protocol core in components/a2ui_core is a C++ port that follows the
+    A2UI renderer blueprints and the structure of the A2UI Swift core.
+  - components/a2ui_core/src/schema/spec_documents_data.cpp embeds the A2UI
+    v1.0 specification schemas and the basic catalog, unmodified.
+  - examples/basic_surface/main/coffee_order.json is an unmodified copy of
+    the upstream example catalogs/basic/v1/examples/13_coffee-order.json.
+  - The test suites run the A2UI conformance cases from the third_party/a2ui
+    submodule.
+
+Unicode CLDR (https://cldr.unicode.org)
+  Copyright Unicode, Inc. Unicode License v3
+  (https://www.unicode.org/license.txt).
+  - components/a2ui_core/src/locale/locale_tables.cpp holds number, currency
+    and date formatting data generated from CLDR 47.
+
+Unicode Character Database (https://www.unicode.org/ucd/)
+  Copyright Unicode, Inc. Unicode License v3.
+  - components/a2ui_core/src/common/xid_tables.inc holds the XID_Start and
+    XID_Continue ranges of Unicode 15.1.0.
+
+LVGL (https://github.com/lvgl/lvgl)
+  Copyright LVGL Kft. MIT License.
+  - Not included in this repository. components/a2ui_lvgl links against it,
+    and third_party/lvgl is a git submodule used for host builds.

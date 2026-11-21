@@ -21,11 +21,15 @@ UPSTREAM := third_party/a2ui
 
 SAN ?= -fsanitize=address,undefined -fno-sanitize=vptr -fno-omit-frame-pointer
 OPT ?= -O1 -g
-WARN := -Wall -Wextra -Wno-unused-parameter -Wformat=2 -Wformat-truncation=2 -Wformat-overflow=2
+# Clang rejects GCC's leveled format checks and -Wmaybe-uninitialized.
+IS_CLANG := $(shell $(CXX) --version 2>/dev/null | grep -qi clang && echo 1)
+GCC_WARN := $(if $(IS_CLANG),,-Wformat-truncation=2 -Wformat-overflow=2)
+GCC_TEST_WARN := $(if $(IS_CLANG),,-Wno-maybe-uninitialized)
+WARN := -Wall -Wextra -Wno-unused-parameter -Wformat=2 $(GCC_WARN)
 
 LIB_CXXFLAGS := -std=c++17 $(OPT) $(WARN) $(SAN) -fno-exceptions -fno-rtti \
 	-Icomponents/a2ui_core/include
-TEST_CXXFLAGS := -std=c++17 $(OPT) $(WARN) -Wno-maybe-uninitialized $(SAN) \
+TEST_CXXFLAGS := -std=c++17 $(OPT) $(WARN) $(GCC_TEST_WARN) $(SAN) \
 	-Icomponents/a2ui_core/include -Itest/harness
 LDFLAGS += $(SAN)
 

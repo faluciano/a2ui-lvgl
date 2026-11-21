@@ -1,0 +1,16 @@
+a2ui-lvgl
+Copyright 2026 The a2ui-lvgl Authors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes or is derived from the following third-party work.
+
+A2UI (https://github.com/a2ui-project/a2ui)
+  Copyright Google LLC and the A2UI authors. Apache License 2.0.
+  - The basic_surface example embeds coffee_order.json, an unmodified copy of
+    the upstream example catalogs/basic/v1/examples/13_coffee-order.json.
+
+LVGL (https://github.com/lvgl/lvgl)
+  Copyright LVGL Kft. MIT License.
+  - Not included. This component links against LVGL, which the ESP-IDF
+    component manager fetches as lvgl/lvgl.
