@@ -177,7 +177,8 @@ Styles::~Styles() {
 
 Styles& styles(Surface& surface) {
   std::shared_ptr<void>& slot = surface.resource(&kStylesKey);
-  if (!slot) slot = std::make_shared<Styles>(surface.theme());
+  // The resource slot is a public std::shared_ptr<void>; one per surface.
+  if (!slot) slot = std::make_shared<Styles>(surface.theme());  // ref-check: allow
   return *static_cast<Styles*>(slot.get());
 }
 

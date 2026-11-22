@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "a2ui/json.h"
+#include "a2ui/ref.h"
 
 namespace a2ui {
 namespace spec {
@@ -25,10 +26,10 @@ enum class Document : uint8_t {
 std::string_view text(Document doc);
 
 /** The parsed document, shared. Never null (the embedded text is valid JSON). */
-std::shared_ptr<const Json> parsed(Document doc);
+Ref<const Json> parsed(Document doc);
 
 /** The common types document of a normalized protocol version ("1.0"), or null. */
-std::shared_ptr<const Json> common_types(std::string_view protocol_version);
+Ref<const Json> common_types(std::string_view protocol_version);
 
 }  // namespace spec
 }  // namespace a2ui

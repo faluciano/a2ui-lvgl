@@ -179,7 +179,7 @@ Json flatten_component(const Json& schema, const Json& own_defs, Bundler* b, int
 
 Json Catalog::validation_schema() const {
   const Json doc = to_json();
-  const std::shared_ptr<const Json> common_doc = spec::common_types(protocol_version_);
+  const Ref<const Json> common_doc = spec::common_types(protocol_version_);
   const Json& own_defs = doc["$defs"];
 
   Bundler b;

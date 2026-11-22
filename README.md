@@ -168,17 +168,22 @@ new platform needs.
 
 ### Memory
 
-Measured on a 64-bit host, so the ESP32 figures should be roughly half. They
-are estimates until someone measures on a board.
+Measured in Espressif's QEMU emulation of the ESP32-S3 and ESP32-C3; not yet
+confirmed on a board.
 
-| What | 64-bit host | Estimate on ESP32 |
+| What | Heap | Stack |
 |---|---|---|
-| Basic catalog, loaded once | 310 KB | about 150 KB |
-| One surface with its widget tree | 25 to 90 KB | about 15 to 50 KB |
+| Basic catalog, loaded once | about 220 KB | 5 KB |
+| A typical card, with its LVGL widgets | about 80 KB | 9 KB |
+| A message at the default depth limits | | 36 KB |
 
-That fits an **ESP32-S3 or ESP32-P4 with PSRAM** comfortably. Chips without
-PSRAM (ESP32-C3, plain ESP32 modules) build but will be tight or run out of
-heap. A compact catalog for them is on the roadmap.
+You need an **ESP32-S3 or ESP32-P4 with PSRAM**. Nearly every allocation is
+small, so ESP-IDF puts it in internal RAM first unless you change
+`CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`. Chips without PSRAM (ESP32-C3, plain
+ESP32 modules) build, but an ESP32-C3 ran out of memory rendering a typical
+card; a compact catalog for them is on the roadmap.
+[docs/porting.md](docs/porting.md#memory-on-esp-idf) explains how to keep
+the libraries in PSRAM and how much stack to give the A2UI task.
 
 ## Limitations
 

@@ -136,11 +136,11 @@ Json issues_to_json(const std::vector<ValidationIssue>& issues) {
 // ---------------------------------------------------------------------------
 // Registry
 
-void SchemaRegistry::add(std::string name, std::shared_ptr<const Json> document) {
+void SchemaRegistry::add(std::string name, Ref<const Json> document) {
   add(std::move(name), std::move(document), nullptr);
 }
 
-void SchemaRegistry::add(std::string name, std::shared_ptr<const Json> document,
+void SchemaRegistry::add(std::string name, Ref<const Json> document,
                          PointerResolver resolver) {
   Doc d;
   d.name = std::move(name);
@@ -159,7 +159,7 @@ void SchemaRegistry::add(std::string name, std::shared_ptr<const Json> document,
   docs_.push_back(std::move(d));
 }
 
-void SchemaRegistry::add_override(std::string ref, std::shared_ptr<const Json> schema) {
+void SchemaRegistry::add_override(std::string ref, Ref<const Json> schema) {
   for (auto& o : overrides_) {
     if (o.key == ref) {
       o.schema = std::move(schema);

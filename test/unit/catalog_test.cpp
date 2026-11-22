@@ -242,7 +242,7 @@ TEST(catalog_validation_schema_is_self_contained) {
             std::string("#/$defs/DynamicString"));
   // The bundle validates on its own, with no other document registered.
   a2ui::SchemaRegistry reg;
-  auto self = std::make_shared<const Json>(s);
+  auto self = a2ui::make_ref<const Json>(s);
   reg.add("bundle.json", self);
   EXPECT_TRUE(a2ui::validate_ref(reg, "bundle.json#/components/Text",
                                  J(R"({"id":"t","component":"Text","text":{"@path":"/x"}})")).ok());

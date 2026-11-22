@@ -135,13 +135,13 @@ const a2ui_lvgl::ComponentRegistry& test_registry() {
 
 const a2ui::SchemaRegistry* outbound_schema(const harness::Context& ctx, const Json** schema) {
   static a2ui::SchemaRegistry registry;
-  static std::shared_ptr<const Json> doc;
+  static a2ui::Ref<const Json> doc;
   static bool loaded = false;
   if (!loaded) {
     loaded = true;
     Json d = harness::load_json_file(ctx.repo_path("specification/v1_0/json/renderer_to_agent.json"));
     if (d.is_object()) {
-      doc = std::make_shared<const Json>(std::move(d));
+      doc = a2ui::make_ref<const Json>(std::move(d));
       registry.add("renderer_to_agent.json", doc);
       if (auto common = a2ui::spec::common_types("1.0")) registry.add("common_types.json", common);
     }
@@ -446,14 +446,14 @@ const a2ui::SchemaRegistry* registry_for(const Json& env, const MessageProcessor
   a2ui::CatalogPtr cat = processor->find_catalog(call["catalogId"].as_string());
   if (!cat) return base;
   auto reg = std::make_unique<a2ui::SchemaRegistry>(cat->schema_registry());
-  reg->add("renderer_to_agent.json", std::make_shared<const Json>(**schema));
+  reg->add("renderer_to_agent.json", a2ui::make_ref<const Json>(**schema));
   Json any = Json::array();
   for (const auto& f : cat->functions()) {
     if (!f.api.name.empty() && f.api.name[0] != '@') {
       any.push_back(Json::object({{"$ref", Json("catalog.json#/functions/" + a2ui::escape_pointer_token(f.api.name))}}));
     }
   }
-  reg->add_override("catalog.json#/$defs/anyFunction", std::make_shared<const Json>(Json::object({{"oneOf", any}})));
+  reg->add_override("catalog.json#/$defs/anyFunction", a2ui::make_ref<const Json>(Json::object({{"oneOf", any}})));
   *holder = std::move(reg);
   return holder->get();
 }

@@ -9,9 +9,9 @@ namespace a2ui {
 namespace spec {
 namespace {
 
-std::shared_ptr<const Json> parse_text(std::string_view text) {
+Ref<const Json> parse_text(std::string_view text) {
   auto r = Json::parse(text, 64);
-  return std::make_shared<const Json>(r.ok ? std::move(r.value) : Json::object());
+  return make_ref<const Json>(r.ok ? std::move(r.value) : Json::object());
 }
 
 }  // namespace
@@ -28,25 +28,25 @@ std::string_view text(Document doc) {
   return {};
 }
 
-std::shared_ptr<const Json> parsed(Document doc) {
+Ref<const Json> parsed(Document doc) {
   switch (doc) {
     case Document::CommonTypesV1_0: {
-      static const std::shared_ptr<const Json> d = parse_text(text(doc));
+      static const Ref<const Json> d = parse_text(text(doc));
       return d;
     }
     case Document::AgentToRendererV1_0: {
-      static const std::shared_ptr<const Json> d = parse_text(text(doc));
+      static const Ref<const Json> d = parse_text(text(doc));
       return d;
     }
     case Document::BasicCatalogV1: {
-      static const std::shared_ptr<const Json> d = parse_text(text(doc));
+      static const Ref<const Json> d = parse_text(text(doc));
       return d;
     }
   }
   return parse_text("{}");
 }
 
-std::shared_ptr<const Json> common_types(std::string_view protocol_version) {
+Ref<const Json> common_types(std::string_view protocol_version) {
   if (protocol_version == "1.0") return parsed(Document::CommonTypesV1_0);
   return nullptr;
 }

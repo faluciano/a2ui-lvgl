@@ -75,7 +75,7 @@ Json decode_numbers(const Json& v) {
 const CatalogPtr& basic_v1() {
   static CatalogPtr c = [] {
     auto r = Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
-    CatalogPtr cat = r.ok() ? r.value() : std::make_shared<Catalog>();
+    CatalogPtr cat = r.ok() ? r.value() : a2ui::make_ref<Catalog>();
     a2ui::basic_catalog::bind_functions(*cat);
     return cat;
   }();
@@ -86,7 +86,7 @@ const CatalogPtr& basic_v1() {
 CatalogPtr basic_functions_as(const std::string& id, const std::string& version) {
   static const std::vector<a2ui::DeriveEntry> kNone;
   auto r = basic_v1()->derive(id, &kNone, nullptr);
-  CatalogPtr c = r.ok() ? r.value() : std::make_shared<Catalog>();
+  CatalogPtr c = r.ok() ? r.value() : a2ui::make_ref<Catalog>();
   c->set_id(id);
   a2ui::basic_catalog::bind_functions(*c);
   c->set_protocol_version(a2ui::normalize_protocol_version(version));
@@ -279,7 +279,7 @@ std::vector<CatalogPtr> rpc_catalogs(const std::string& id, const std::string& v
   if (id == "basic") {
     cat = basic_functions_as("basic", version);
   } else {
-    cat = std::make_shared<Catalog>();
+    cat = a2ui::make_ref<Catalog>();
     cat->set_id(id);
     cat->set_protocol_version(a2ui::normalize_protocol_version(version));
   }
@@ -687,7 +687,7 @@ HARNESS_ACTION("handle_rpc", run_handle_rpc) {
   for (const char* key : {"uiBindingScenario", "uiActionFallbackScenario"}) {
     const Json& sc = args[key];
     if (!sc.is_object()) continue;
-    auto scat = std::make_shared<Catalog>();
+    auto scat = a2ui::make_ref<Catalog>();
     scat->set_id(str(sc["catalogId"]));
     scat->set_protocol_version("1.0");
     add_scenario_functions(*scat, sc["localFunctions"]);
@@ -762,7 +762,7 @@ HARNESS_ACTION("handle_rpc", run_handle_rpc) {
 std::vector<CatalogPtr> routing_catalogs(const Json& specs) {
   std::vector<CatalogPtr> out;
   for (const auto& spec : specs.as_array()) {
-    auto cat = std::make_shared<Catalog>();
+    auto cat = a2ui::make_ref<Catalog>();
     cat->set_id(str(spec["catalogId"]));
     cat->set_protocol_version("1.0");
     for (const auto& name : spec["localFunctions"].as_array()) {

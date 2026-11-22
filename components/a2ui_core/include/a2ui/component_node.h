@@ -39,6 +39,7 @@
 #include "a2ui/error.h"
 #include "a2ui/events.h"
 #include "a2ui/json.h"
+#include "a2ui/ref.h"
 
 namespace a2ui {
 
@@ -47,7 +48,7 @@ class AgentCallTracker;
 class ComponentModel;
 class ComponentNode;
 class SurfaceModel;
-using NodePtr = std::shared_ptr<ComponentNode>;
+using NodePtr = Ref<ComponentNode>;
 
 namespace detail {
 struct ResolverState;
@@ -115,8 +116,8 @@ class PropValue {
   Json value_;
   std::string path_;
   NodePtr node_;
-  std::shared_ptr<const std::vector<PropValue>> items_;
-  std::shared_ptr<const std::vector<PropMember>> members_;
+  Ref<const std::vector<PropValue>> items_;
+  Ref<const std::vector<PropMember>> members_;
 };
 
 struct PropMember {
@@ -149,7 +150,7 @@ class NodeProps {
   std::vector<PropMember> members_;
 };
 
-class ComponentNode : public std::enable_shared_from_this<ComponentNode> {
+class ComponentNode : public EnableRefFromThis<ComponentNode> {
  public:
   ComponentNode(const ComponentNode&) = delete;
   ComponentNode& operator=(const ComponentNode&) = delete;
@@ -254,7 +255,7 @@ class ComponentNode : public std::enable_shared_from_this<ComponentNode> {
   std::vector<std::pair<std::string, NodePtr>> edges_;  // Child nodes by edge key.
   // Evaluates this node's functions and remembers which agent calls it made,
   // so a settled call re-resolves exactly the nodes that read it.
-  std::shared_ptr<AgentCallTracker> agent_tracker_;
+  Ref<AgentCallTracker> agent_tracker_;
   void* user_data_ = nullptr;
 };
 

@@ -68,14 +68,14 @@ PropValue PropValue::node(NodePtr node) {
 PropValue PropValue::array(std::vector<PropValue> items) {
   PropValue p;
   p.kind_ = Kind::Array;
-  p.items_ = std::make_shared<const std::vector<PropValue>>(std::move(items));
+  p.items_ = make_ref<const std::vector<PropValue>>(std::move(items));
   return p;
 }
 
 PropValue PropValue::object(std::vector<PropMember> members) {
   PropValue p;
   p.kind_ = Kind::Object;
-  p.members_ = std::make_shared<const std::vector<PropMember>>(std::move(members));
+  p.members_ = make_ref<const std::vector<PropMember>>(std::move(members));
   return p;
 }
 

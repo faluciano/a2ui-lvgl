@@ -1,0 +1,6 @@
+dependencies:
+  idf: ">=5.4"
+  lvgl/lvgl: "~9.6.0"
+  faluciano/a2ui_lvgl:
+    version: "*"
+    override_path: ../../../components/a2ui_lvgl

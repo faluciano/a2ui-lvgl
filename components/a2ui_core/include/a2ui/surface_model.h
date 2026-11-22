@@ -28,6 +28,7 @@
 #include "a2ui/error.h"
 #include "a2ui/events.h"
 #include "a2ui/json.h"
+#include "a2ui/ref.h"
 
 namespace a2ui {
 
@@ -184,7 +185,7 @@ class SurfaceModel : public FunctionHost {
                   std::function<void(const Json& result)> on_done = {}, const Json& metadata = Json());
 
   /** Expires when the surface is disposed (for callbacks that outlive it). */
-  std::weak_ptr<const void> liveness() const { return alive_; }
+  WeakRef<const void> liveness() const { return alive_; }
   void set_url_handler(UrlHandler handler) { url_handler_ = std::move(handler); }
 
   bool disposed() const { return disposed_; }
@@ -226,7 +227,7 @@ class SurfaceModel : public FunctionHost {
   AgentCallCache agent_cache_;
   EventSource<AgentCallSettlement> on_agent_call_settled_;
   uint32_t agent_generation_ = 0;
-  std::shared_ptr<int> alive_ = std::make_shared<int>(0);
+  Ref<int> alive_ = make_ref<int>(0);
   UrlHandler url_handler_;
   std::function<double()> clock_;
   bool disposed_ = false;

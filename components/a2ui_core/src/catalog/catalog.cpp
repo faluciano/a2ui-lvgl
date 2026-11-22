@@ -176,7 +176,7 @@ Json Catalog::to_json() const {
 Result<CatalogPtr> Catalog::derive(std::string_view id, const std::vector<DeriveEntry>* components,
                                    const std::vector<DeriveEntry>* functions,
                                    const std::string* instructions) const {
-  auto d = std::make_shared<Catalog>();
+  auto d = make_ref<Catalog>();
   d->id_ = std::string(id);
   d->protocol_version_ = protocol_version_;
   d->declared_protocol_version_ = declared_protocol_version_;
