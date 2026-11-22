@@ -21,6 +21,8 @@ From the first hardware report (ESP32-P4).
   [docs/porting.md](docs/porting.md#memory-on-esp-idf), with how to keep the
   libraries in PSRAM and how much stack a task needs. The earlier README
   estimates were too low.
+- `tools/stack_probe`: an ESP-IDF project that measures those stack figures
+  in QEMU or on a board. CI builds it with the example.
 
 ## 0.1.0
 

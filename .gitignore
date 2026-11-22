@@ -5,3 +5,9 @@
 /examples/*/sdkconfig
 /examples/*/sdkconfig.old
 /examples/*/dependencies.lock
+/tools/stack_probe/build/
+/tools/stack_probe/build-*/
+/tools/stack_probe/managed_components/
+/tools/stack_probe/sdkconfig
+/tools/stack_probe/sdkconfig.old
+/tools/stack_probe/dependencies.lock

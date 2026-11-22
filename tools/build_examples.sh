@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds the ESP-IDF examples for each supported target so device-only
-# compiler errors (e.g. uint32_t being `long` on Xtensa/RISC-V) are caught.
+# Builds the ESP-IDF examples and tools/stack_probe for each supported target
+# so device-only compiler errors (e.g. uint32_t being `long` on Xtensa/RISC-V)
+# are caught.
 #
 #   tools/build_examples.sh [target ...]     default: esp32s3 esp32c3 esp32p4 esp32
 #
@@ -20,7 +21,7 @@ if ! command -v idf.py >/dev/null 2>&1; then
 fi
 
 status=0
-for example in "$root"/examples/*/; do
+for example in "$root"/examples/*/ "$root"/tools/stack_probe/; do
   name="$(basename "$example")"
   for target in "${targets[@]}"; do
     log="$root/build/examples/$name-$target.log"
@@ -28,8 +29,8 @@ for example in "$root"/examples/*/; do
     printf '%-20s %-8s ' "$name" "$target"
     # A fresh configure picks up new sources (ESP-IDF globs only at configure time).
     # Each target keeps its own sdkconfig in its build dir; the shared one pins a single target.
-    # Build dirs live under the repository's build/, not in the example. ESP-IDF
-    # still writes managed_components/ and dependencies.lock next to the example;
+    # Build dirs live under the repository's build/, not in the project. ESP-IDF
+    # still writes managed_components/ and dependencies.lock next to the project;
     # both are gitignored and left out of registry archives by default.
     out="$root/build/examples/$name-$target"
     if (cd "$example" && idf.py -B "$out" -DIDF_TARGET="$target" \

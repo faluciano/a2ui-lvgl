@@ -26,7 +26,9 @@ use the value you pass to `MessageProcessor::tick()`, not a system clock.
 
 The figures in this section were measured with ESP-IDF v6.0.3 and the example's
 `sdkconfig.defaults` (`-Os`), in Espressif's QEMU emulation of the ESP32-S3
-(8 MB octal PSRAM) and the ESP32-C3. They are not yet confirmed on hardware.
+(octal PSRAM) and the ESP32-C3. They are not yet confirmed on hardware.
+[`tools/stack_probe`](../tools/stack_probe/README.md) reproduces the stack
+figures, in QEMU or on a board.
 
 ### Reference counting
 
@@ -124,7 +126,7 @@ Peak stack of a fresh task, measured on the ESP32-S3:
 |---|---|
 | Load the basic catalog | 5.4 KB |
 | A typical card (`13_coffee-order`): process the messages, build and draw the widgets | 8.6 KB |
-| A 25-level component tree: process / build and draw | 14.0 KB / 20.5 KB |
+| A 25-level component tree: process / build and draw | 14.0 KB / 20.3 KB |
 | A 50-level tree, the default limit: process / build and draw | 23.6 KB / 35.5 KB |
 | Typing into a field of the 50-level card (binding, checks, re-resolution) | 35.2 KB |
 
