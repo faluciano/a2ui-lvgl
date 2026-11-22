@@ -18,6 +18,8 @@
 #include <utility>
 #include <vector>
 
+#include "a2ui/ref.h"
+
 namespace a2ui {
 
 class Subscription {
@@ -77,17 +79,17 @@ class EventSource {
  public:
   using Listener = std::function<void(const Args&...)>;
 
-  EventSource() : state_(std::make_shared<State>()) {}
+  EventSource() : state_(make_ref<State>()) {}
   EventSource(const EventSource&) = delete;
   EventSource& operator=(const EventSource&) = delete;
 
   /** Registers `fn`; the returned handle unsubscribes when destroyed. */
   [[nodiscard]] Subscription subscribe(Listener fn) const {
-    auto entry = std::make_shared<Entry>();
+    auto entry = make_ref<Entry>();
     entry->fn = std::move(fn);
     state_->entries.push_back(entry);
-    std::weak_ptr<State> weak_state = state_;
-    std::weak_ptr<Entry> weak_entry = entry;
+    WeakRef<State> weak_state = state_;
+    WeakRef<Entry> weak_entry = entry;
     return Subscription([weak_state, weak_entry] {
       auto s = weak_state.lock();
       auto e = weak_entry.lock();
@@ -126,9 +128,9 @@ class EventSource {
     bool alive = true;
   };
   struct State {
-    std::vector<std::shared_ptr<Entry>> entries;
+    std::vector<Ref<Entry>> entries;
   };
-  std::shared_ptr<State> state_;
+  Ref<State> state_;
 };
 
 namespace detail {
@@ -170,8 +172,8 @@ class Signal {
  public:
   using Listener = std::function<void(const T&)>;
 
-  Signal() : state_(std::make_shared<State>()) {}
-  explicit Signal(T initial) : state_(std::make_shared<State>()) {
+  Signal() : state_(make_ref<State>()) {}
+  explicit Signal(T initial) : state_(make_ref<State>()) {
     state_->value = std::move(initial);
   }
   Signal(const Signal&) = delete;
@@ -219,7 +221,7 @@ class Signal {
     }
     if (state_->queued) return;
     state_->queued = true;
-    std::weak_ptr<State> weak = state_;
+    WeakRef<State> weak = state_;
     batch.pending.push_back([weak] {
       if (auto s = weak.lock()) {
         s->queued = false;
@@ -228,7 +230,7 @@ class Signal {
     });
   }
 
-  std::shared_ptr<State> state_;
+  Ref<State> state_;
 };
 
 }  // namespace a2ui

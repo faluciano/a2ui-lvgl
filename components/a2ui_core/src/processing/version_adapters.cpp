@@ -502,8 +502,8 @@ std::unique_ptr<VersionAdapter> make_v10_adapter() {
   return a;
 }
 
-std::shared_ptr<VersionAdapterRegistry> VersionAdapterRegistry::make_default() {
-  auto r = std::make_shared<VersionAdapterRegistry>();
+Ref<VersionAdapterRegistry> VersionAdapterRegistry::make_default() {
+  auto r = make_ref<VersionAdapterRegistry>();
   r->register_adapter(make_v10_adapter());
   return r;
 }

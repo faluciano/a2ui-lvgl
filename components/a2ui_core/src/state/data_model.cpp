@@ -131,7 +131,7 @@ Error data_error(std::string_view pointer, const std::string& why) {
 
 DataModel::DataModel(Json initial)
     : root_(initial.is_nullish() ? Json::object() : std::move(initial)),
-      observers_(std::make_shared<std::vector<std::shared_ptr<Observer>>>()) {}
+      observers_(make_ref<std::vector<Ref<Observer>>>()) {}
 
 Result<const Json*> DataModel::get(std::string_view pointer) const {
   const auto segs = path::split(pointer);
@@ -269,13 +269,13 @@ void DataModel::notify(const std::vector<std::string>& written, const Json& old_
 }
 
 Subscription DataModel::subscribe(std::string_view pointer, Listener listener) {
-  auto obs = std::make_shared<Observer>();
+  auto obs = make_ref<Observer>();
   obs->segments = path::split(pointer);
   obs->path = path::join(obs->segments);
   obs->listener = std::move(listener);
   observers_->push_back(obs);
-  std::weak_ptr<std::vector<std::shared_ptr<Observer>>> weak_list = observers_;
-  std::weak_ptr<Observer> weak_obs = obs;
+  WeakRef<std::vector<Ref<Observer>>> weak_list = observers_;
+  WeakRef<Observer> weak_obs = obs;
   return Subscription([weak_list, weak_obs] {
     auto list = weak_list.lock();
     auto o = weak_obs.lock();

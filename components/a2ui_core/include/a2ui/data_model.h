@@ -18,6 +18,7 @@
 #include "a2ui/error.h"
 #include "a2ui/events.h"
 #include "a2ui/json.h"
+#include "a2ui/ref.h"
 
 namespace a2ui {
 
@@ -103,7 +104,7 @@ class DataModel {
   void notify(const std::vector<std::string>& written, const Json& old_value, bool changed);
 
   Json root_;
-  std::shared_ptr<std::vector<std::shared_ptr<Observer>>> observers_;
+  Ref<std::vector<Ref<Observer>>> observers_;
   EventSource<std::string> on_changed_;
 };
 

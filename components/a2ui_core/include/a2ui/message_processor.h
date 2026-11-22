@@ -31,6 +31,7 @@
 #include "a2ui/rpc.h"
 #include "a2ui/surface_model.h"
 #include "a2ui/validation_config.h"
+#include "a2ui/ref.h"
 
 namespace a2ui {
 
@@ -103,7 +104,7 @@ std::unique_ptr<VersionAdapter> make_v10_adapter();
 class VersionAdapterRegistry {
  public:
   /** A registry holding the v1.0 adapter. */
-  static std::shared_ptr<VersionAdapterRegistry> make_default();
+  static Ref<VersionAdapterRegistry> make_default();
 
   void register_adapter(std::unique_ptr<VersionAdapter> adapter);
   Result<const VersionAdapter*> get_adapter(std::string_view version) const;
@@ -128,7 +129,7 @@ struct MessageProcessorOptions {
    */
   bool forward_actions = false;
   /** Defaults to VersionAdapterRegistry::make_default(). */
-  std::shared_ptr<VersionAdapterRegistry> adapters;
+  Ref<VersionAdapterRegistry> adapters;
   /** Options of the processor's RpcHandler (default agent call timeout, clock). */
   RpcOptions rpc;
 };
@@ -239,7 +240,7 @@ class MessageProcessor {
   std::vector<CatalogPtr> catalogs_;
   std::optional<ValidationConfig> validation_config_;
   OutboundListener outbound_;
-  std::shared_ptr<VersionAdapterRegistry> adapters_;
+  Ref<VersionAdapterRegistry> adapters_;
   std::unique_ptr<RpcHandler> rpc_;
   SurfaceGroupModel model_;
   EventSource<Json> on_error_;

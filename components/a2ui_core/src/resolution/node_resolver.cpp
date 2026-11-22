@@ -131,7 +131,7 @@ struct Binder {
                          const std::map<std::string, PropertyKind>& kinds);
 };
 
-struct ResolverState : std::enable_shared_from_this<ResolverState> {
+struct ResolverState : EnableRefFromThis<ResolverState> {
   SurfaceModel* surface = nullptr;
   NodeResolverOptions options;
   Signal<NodePtr> root;
@@ -201,7 +201,7 @@ struct ResolverState : std::enable_shared_from_this<ResolverState> {
     if (batch.depth > 0) {
       if (flush_queued) return;
       flush_queued = true;
-      std::weak_ptr<ResolverState> weak = shared_from_this();
+      WeakRef<ResolverState> weak = shared_from_this();
       batch.pending.push_back([weak] {
         if (auto s = weak.lock()) {
           s->flush_queued = false;
@@ -446,7 +446,7 @@ struct ResolverState : std::enable_shared_from_this<ResolverState> {
     }
     std::vector<std::string> deps;
     std::vector<std::pair<std::string, NodePtr>> edges;
-    if (!n->agent_tracker_) n->agent_tracker_ = std::make_shared<AgentCallTracker>(*surface);
+    if (!n->agent_tracker_) n->agent_tracker_ = make_ref<AgentCallTracker>(*surface);
     n->agent_tracker_->begin_pass();
     DataContext ctx(surface->data_model(), n->agent_tracker_.get(), n->data_path_, n->index_);
     ctx.set_dependency_sink(&deps);
@@ -690,7 +690,7 @@ PropValue Binder::nested_value(const std::string& slot, const Json& raw,
 // NodeResolver
 
 NodeResolver::NodeResolver(SurfaceModel& surface, NodeResolverOptions options)
-    : state_(std::make_shared<detail::ResolverState>()) {
+    : state_(make_ref<detail::ResolverState>()) {
   state_->attach(surface, options);
 }
 

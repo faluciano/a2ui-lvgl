@@ -28,6 +28,11 @@ every message as untrusted input. These are security bugs:
   4,096 characters, which bounds the cost.
 - The library does not limit how many surfaces or components an agent
   creates. Cap message size and rate in your transport.
+- Recursion is bounded, but a message at the default depth limits needs
+  about 36 KB of stack on the task that processes and renders it. A smaller
+  stack overflows. Size the task, or lower the limits, as described in
+  [docs/porting.md](docs/porting.md#stack). An overflow with a correctly sized
+  stack is a security bug.
 
 ## What the library does not do
 

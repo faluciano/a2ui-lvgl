@@ -57,7 +57,7 @@ struct Fixture {
   a2ui::Subscription error_sub;
 
   explicit Fixture(a2ui::RpcOptions rpc = {}) {
-    auto cat = std::make_shared<a2ui::Catalog>();
+    auto cat = a2ui::make_ref<a2ui::Catalog>();
     cat->set_id("c");
     cat->set_protocol_version("1.0");
     a2ui::MessageProcessorOptions opts;

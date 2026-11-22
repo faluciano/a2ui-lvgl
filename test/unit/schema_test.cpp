@@ -23,7 +23,7 @@ Json J(const char* text) {
   return r.value;
 }
 
-std::shared_ptr<const Json> doc(const char* text) { return std::make_shared<const Json>(J(text)); }
+a2ui::Ref<const Json> doc(const char* text) { return a2ui::make_ref<const Json>(J(text)); }
 
 // Validates `instance` against `schema` as a standalone document "test.json".
 bool valid(const char* schema, const char* instance, std::vector<ValidationIssue>* issues = nullptr) {

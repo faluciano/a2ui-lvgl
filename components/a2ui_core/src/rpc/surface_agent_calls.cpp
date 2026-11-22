@@ -116,7 +116,7 @@ void settle_action_call(SurfaceModel& surface, ActionRun& run, const AgentFuncti
 /** The FunctionHost of an action run: the surface, except that agent calls go through the run's cache. */
 class ActionHost : public FunctionHost {
  public:
-  ActionHost(SurfaceModel& surface, std::shared_ptr<ActionRun> run) : surface_(surface), run_(std::move(run)) {}
+  ActionHost(SurfaceModel& surface, Ref<ActionRun> run) : surface_(surface), run_(std::move(run)) {}
 
   Result<const Catalog*> resolve_function_catalog(const std::string* catalog_id,
                                                   const std::string& function_name) override {
@@ -149,9 +149,9 @@ class ActionHost : public FunctionHost {
       return AgentCallStatus::Failed;
     }
     run_->cache.mark_pending(key);
-    std::weak_ptr<const void> alive = surface_.liveness();
+    WeakRef<const void> alive = surface_.liveness();
     SurfaceModel* surface = &surface_;
-    std::shared_ptr<ActionRun> run = run_;
+    Ref<ActionRun> run = run_;
     auto sent = caller->call_agent(surface_.id(), call, [alive, surface, run, call, key](Result<Json> outcome) {
       if (alive.expired()) return;
       settle_action_call(*surface, *run, call, key, std::move(outcome));
@@ -173,12 +173,12 @@ class ActionHost : public FunctionHost {
 
  private:
   SurfaceModel& surface_;
-  std::shared_ptr<ActionRun> run_;
+  Ref<ActionRun> run_;
 };
 
 using DoneFn = std::function<void(const Json&)>;
 
-void run_function_call(SurfaceModel& surface, const std::shared_ptr<ActionRun>& run, const Json& call,
+void run_function_call(SurfaceModel& surface, const Ref<ActionRun>& run, const Json& call,
                        const std::string& scope, bool user_activated, const DoneFn& on_done) {
   if (run->stopped || surface.disposed()) return;
   ActionHost host(surface, run);
@@ -193,7 +193,7 @@ void run_function_call(SurfaceModel& surface, const std::shared_ptr<ActionRun>& 
     if (on_done) on_done(result);
     return;
   }
-  std::weak_ptr<ActionRun> weak = run;
+  WeakRef<ActionRun> weak = run;
   if (ctx.had_deferred_arguments()) {
     // The call runs once the agent calls in its arguments are answered.
     SurfaceModel* s = &surface;
@@ -226,7 +226,7 @@ void report_invalid_event_value(SurfaceModel& surface, const std::string& messag
  * entry that waits on the agent is awaited before the next one is resolved.
  * Each run resolves the entries again, reading answers from the run cache.
  */
-void run_event(SurfaceModel& surface, const std::shared_ptr<ActionRun>& run, const Json& payload, bool shorthand,
+void run_event(SurfaceModel& surface, const Ref<ActionRun>& run, const Json& payload, bool shorthand,
                const std::string& source_id, const std::string& scope, bool user_activated, const DoneFn& on_done) {
   if (run->stopped || surface.disposed()) return;
   const Json& evt = shorthand ? payload : payload["event"];
@@ -234,7 +234,7 @@ void run_event(SurfaceModel& surface, const std::shared_ptr<ActionRun>& run, con
   DataContext ctx(surface.data_model(), &host, scope, index_of_scope(scope), user_activated);
 
   SurfaceModel* s = &surface;
-  std::weak_ptr<ActionRun> weak = run;
+  WeakRef<ActionRun> weak = run;
   auto wait = [&] {
     run->resume = [s, weak, payload, shorthand, source_id, scope, user_activated, on_done] {
       if (auto r = weak.lock()) run_event(*s, r, payload, shorthand, source_id, scope, user_activated, on_done);
@@ -339,7 +339,7 @@ AgentCallStatus SurfaceModel::agent_function_value(const std::string& name, cons
   }
 
   agent_cache_.mark_pending(key);
-  std::weak_ptr<int> alive = alive_;
+  WeakRef<int> alive = alive_;
   const uint32_t generation = agent_generation_;
   auto sent = agent_caller_->call_agent(id_, call, [this, alive, generation, call, key](Result<Json> outcome) {
     // Ignore calls that settle after the surface is gone or its caller changed.
@@ -383,7 +383,7 @@ void SurfaceModel::run_action(const Json& action, const std::string& source_comp
                               const std::string& scope_path, bool user_activated,
                               std::function<void(const Json& result)> on_done, const Json& metadata) {
   if (disposed_ || !action.is_object()) return;
-  auto run = std::make_shared<ActionRun>();
+  auto run = make_ref<ActionRun>();
   run->metadata = metadata;
   auto check_name = [&](const Json& evt) {
     const Json& name = evt["name"];

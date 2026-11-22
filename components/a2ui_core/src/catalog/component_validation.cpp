@@ -20,15 +20,15 @@ namespace {
 
 constexpr int kMaxWalkDepth = 64;
 
-std::shared_ptr<const Json> parse_static(const char* text) {
+Ref<const Json> parse_static(const char* text) {
   auto r = Json::parse(text);
-  return std::make_shared<const Json>(std::move(r.value));
+  return make_ref<const Json>(std::move(r.value));
 }
 
 // The v1.0 FunctionCall checked as an envelope only: which function runs,
 // and with which args, is checked per call against the catalog it runs in.
-const std::shared_ptr<const Json>& function_call_envelope() {
-  static const std::shared_ptr<const Json> s = parse_static(R"({
+const Ref<const Json>& function_call_envelope() {
+  static const Ref<const Json> s = parse_static(R"({
     "type": "object",
     "properties": {
       "@call": {"type": "string"},
@@ -42,8 +42,8 @@ const std::shared_ptr<const Json>& function_call_envelope() {
 }
 
 // The catalog.json stand-in for validating common types on their own.
-const std::shared_ptr<const Json>& stand_in_catalog() {
-  static const std::shared_ptr<const Json> s = parse_static(R"({
+const Ref<const Json>& stand_in_catalog() {
+  static const Ref<const Json> s = parse_static(R"({
     "$defs": {
       "anyFunction": {
         "type": "object",

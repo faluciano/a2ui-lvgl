@@ -35,6 +35,7 @@
 #include "a2ui/data_context.h"
 #include "a2ui/events.h"
 #include "a2ui/json.h"
+#include "a2ui/ref.h"
 
 namespace a2ui {
 
@@ -81,7 +82,7 @@ class NodeResolver {
   size_t active_subscription_count() const;
 
  private:
-  std::shared_ptr<detail::ResolverState> state_;
+  Ref<detail::ResolverState> state_;
 };
 
 // ---------------------------------------------------------------------------

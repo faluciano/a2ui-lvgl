@@ -21,6 +21,7 @@
 #include "a2ui/error.h"
 #include "a2ui/json.h"
 #include "a2ui/schema.h"
+#include "a2ui/ref.h"
 
 namespace a2ui {
 
@@ -164,7 +165,7 @@ struct ComponentApi {  // [core]
 };
 
 class Catalog;
-using CatalogPtr = std::shared_ptr<Catalog>;
+using CatalogPtr = Ref<Catalog>;
 
 /**
  * Normalizes a protocol version spelling ("v0.9", "0.9.1", "1.0", "v1.0.0")

@@ -209,7 +209,9 @@ uint32_t count_views(a2ui_lvgl::NodeView* view) {
 
 extern "C" void app_main(void) {
   lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
-  // Event handlers run A2UI actions and bindings on the LVGL task.
+  // Event handlers run A2UI actions and bindings on the LVGL task. 16 KB is
+  // plenty for the built-in sample; messages from an agent at the default
+  // depth limits need about 40 KB (see docs/porting.md, "Stack").
   port_cfg.task_stack = 16384;
   ESP_ERROR_CHECK(lvgl_port_init(&port_cfg));
 

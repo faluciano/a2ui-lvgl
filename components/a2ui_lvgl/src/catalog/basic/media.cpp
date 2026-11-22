@@ -80,7 +80,7 @@ class Image : public ComponentInstance {
                     ? lv_obj_get_style_width(box_, LV_PART_MAIN)
                     : 0;
     req.height = lv_obj_get_style_height(box_, LV_PART_MAIN) > 0 ? lv_obj_get_style_height(box_, LV_PART_MAIN) : 0;
-    std::shared_ptr<bool> alive = alive_;
+    a2ui::Ref<bool> alive = alive_;
     const uint32_t generation = ++generation_;
     Image* self = this;
     request_ = loader->load(req, [alive, generation, self](const void* src) {
@@ -147,7 +147,7 @@ class Image : public ComponentInstance {
   bool loaded_ = false;
   uint32_t generation_ = 0;
   std::shared_ptr<void> request_;
-  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+  a2ui::Ref<bool> alive_ = a2ui::make_ref<bool>(true);
 };
 
 /** Video / AudioPlayer: no object; reports its URL for inspection. */

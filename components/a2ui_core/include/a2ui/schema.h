@@ -38,6 +38,7 @@
 
 #include "a2ui/error.h"
 #include "a2ui/json.h"
+#include "a2ui/ref.h"
 
 namespace a2ui {
 
@@ -72,15 +73,15 @@ class SchemaRegistry {
   using PointerResolver = std::function<const Json*(std::string_view pointer)>;
 
   /** Registers (or replaces) a document. Its `$id`, if any, is an alias. */
-  void add(std::string name, std::shared_ptr<const Json> document);
+  void add(std::string name, Ref<const Json> document);
   /** Registers a document whose pointers go through `resolver`. */
-  void add(std::string name, std::shared_ptr<const Json> document, PointerResolver resolver);
+  void add(std::string name, Ref<const Json> document, PointerResolver resolver);
   /**
    * Makes a reference resolve to `schema` instead of its target. The key is
    * "<document name>#<pointer>", e.g. "common_types.json#/$defs/FunctionCall".
    * The override schema is evaluated in the context of that document.
    */
-  void add_override(std::string ref, std::shared_ptr<const Json> schema);
+  void add_override(std::string ref, Ref<const Json> schema);
 
   /** Index of the document a reference's document part names, or -1. */
   int find_document(std::string_view doc_part) const;
@@ -93,12 +94,12 @@ class SchemaRegistry {
   struct Doc {
     std::string name;
     std::string id;
-    std::shared_ptr<const Json> json;
+    Ref<const Json> json;
     PointerResolver resolver;
   };
   struct Override {
     std::string key;
-    std::shared_ptr<const Json> schema;
+    Ref<const Json> schema;
   };
   std::vector<Doc> docs_;
   std::vector<Override> overrides_;

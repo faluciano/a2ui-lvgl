@@ -53,7 +53,7 @@ std::string str(const Json& j) { return j.is_string() ? j.as_string() : std::str
 const CatalogPtr& basic_v1() {
   static const CatalogPtr cat = [] {
     auto r = Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
-    CatalogPtr c = r.ok() ? r.value() : std::make_shared<Catalog>();
+    CatalogPtr c = r.ok() ? r.value() : a2ui::make_ref<Catalog>();
     a2ui::basic_catalog::bind_functions(*c);
     return c;
   }();
@@ -136,7 +136,7 @@ CatalogPtr inline_catalog(const Json& spec, const std::string& id, const std::st
     return from_json_or_note(doc, id, version, error);
   }
   if (capabilities || a2ui::normalize_protocol_version(version) != "1.0") {
-    auto c = std::make_shared<Catalog>();
+    auto c = a2ui::make_ref<Catalog>();
     c->set_id(id);
     c->set_protocol_version(a2ui::normalize_protocol_version(version));
     return c;
@@ -842,7 +842,7 @@ HARNESS_ACTION("select_catalog", run_select_catalog) {
   const std::string default_id = sa["defaultCatalogId"].is_string() ? sa["defaultCatalogId"].as_string() : "basic";
   a2ui::CatalogMap cats;
   auto stub = [](const std::string& id, const std::string& v) {
-    auto c = std::make_shared<Catalog>();
+    auto c = a2ui::make_ref<Catalog>();
     c->set_id(id);
     c->set_protocol_version(a2ui::normalize_protocol_version(v));
     return c;

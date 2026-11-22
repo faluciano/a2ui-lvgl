@@ -75,7 +75,7 @@ SUITE_JSON += $(FIXTURE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.
 # Adapter-only suites outside core/.
 SUITE_JSON += build/conformance/adapter/markdown_subset.json
 
-.PHONY: all test unit conformance suites lvgl lvgl-smoke adapter-conformance renders clean
+.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders clean
 
 all: $(BUILD)/libA2uiCore.a $(BUILD)/unit_tests $(BUILD)/conformance suites $(if $(HAVE_LVGL),lvgl)
 
@@ -151,10 +151,28 @@ renders: $(BUILD)/render_sample
 	done
 	@echo "rendered $(words $(EXAMPLES)) examples into build/renders/"
 
+# The libraries use a2ui::Ref (a2ui/ref.h), not std::shared_ptr: on ESP-IDF
+# every std::shared_ptr control block creates a FreeRTOS mutex in internal
+# RAM. User-facing handles stay std::shared_ptr<void>; mark any other
+# deliberate use with "ref-check: allow".
+REF_CHECK_DIRS ?= components
+check-refs:
+	@bad=$$(grep -rnE 'std::(shared_ptr|weak_ptr|make_shared|allocate_shared|enable_shared_from_this)\b' \
+		$(REF_CHECK_DIRS) --include='*.h' --include='*.cpp' --include='*.inc' \
+		| grep -v 'a2ui_core/include/a2ui/ref.h:' \
+		| grep -v 'ref-check: allow' \
+		| grep -v 'std::shared_ptr<void>' || true); \
+	if [ -n "$$bad" ]; then \
+		echo "$$bad"; \
+		echo "check-refs: use a2ui::Ref and a2ui::make_ref (a2ui/ref.h) in components/"; \
+		exit 1; \
+	fi
+	@echo "check-refs: ok"
+
 ifneq ($(HAVE_LVGL),)
-test: unit conformance lvgl-smoke adapter-conformance
+test: check-refs unit conformance lvgl-smoke adapter-conformance
 else
-test: unit conformance
+test: check-refs unit conformance
 	@echo "note: $(LVGL) not checked out; skipping the LVGL smoke test"
 endif
 

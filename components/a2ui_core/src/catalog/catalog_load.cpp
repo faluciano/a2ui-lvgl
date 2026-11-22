@@ -706,13 +706,13 @@ Result<CatalogPtr> Catalog::from_json(const Json& document, std::string_view cat
 
   // Build. The document is copied once; the loaded definitions are then
   // moved out of the copy.
-  auto catalog = std::make_shared<Catalog>();
+  auto catalog = make_ref<Catalog>();
   catalog->id_ = id;
   catalog->protocol_version_ = version;
   catalog->declared_protocol_version_ = declared.empty() ? std::string(protocol_version) : declared;
   catalog->source_ = document;
   Json& src = catalog->source_;
-  const std::shared_ptr<const Json> common = spec::common_types(version);
+  const Ref<const Json> common = spec::common_types(version);
   const ClassifyCtx ctx{src["$defs"], common.get()};
 
   if (Json* comps = src.find_mut("components")) {
