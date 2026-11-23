@@ -78,20 +78,22 @@ idf.py menuconfig   # "A2UI basic surface example": display, controller, pins
 idf.py build flash monitor
 ```
 
-To use the libraries in your own project, add them to your
-`main/idf_component.yml`:
+To use the libraries in your own project, add them from the
+[ESP Component Registry](https://components.espressif.com/components/faluciano/a2ui_lvgl):
+
+```sh
+idf.py add-dependency "faluciano/a2ui_lvgl^0.1.0"
+```
+
+That also brings in `a2ui_core` and LVGL. To track this repository instead,
+use a git dependency in `main/idf_component.yml`:
 
 ```yaml
 dependencies:
-  lvgl/lvgl: "~9.6.0"
-  faluciano/a2ui_core:
-    git: https://github.com/faluciano/a2ui-lvgl.git
-    path: components/a2ui_core
-    version: v0.1.0
   faluciano/a2ui_lvgl:
     git: https://github.com/faluciano/a2ui-lvgl.git
     path: components/a2ui_lvgl
-    version: v0.1.0
+    version: main
 ```
 
 Then, from the LVGL task:
@@ -206,7 +208,6 @@ The full list is in [docs/adapter.md](docs/adapter.md#limitations).
 2. A WebSocket transport and an end-to-end example with a sample agent.
 3. A compact, precompiled basic catalog for chips without PSRAM.
 4. An SDL desktop simulator.
-5. Publish both components to the ESP Component Registry.
 
 ## Contributing
 
