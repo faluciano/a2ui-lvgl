@@ -3,7 +3,8 @@
 Thanks for helping. The most useful contributions right now are:
 
 - **Board reports.** Flash the example, then tell us the board, the display,
-  free heap and whether it drew correctly. Nobody has run this on hardware yet.
+  free heap and whether it drew correctly. So far it has run on one ESP32-P4
+  board, so reports from other chips and displays help most.
 - **Bug reports** with the A2UI messages that reproduce them.
   `build/host/render_sample messages.json out.png` shows most rendering bugs
   without a device.

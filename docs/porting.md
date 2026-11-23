@@ -26,7 +26,8 @@ use the value you pass to `MessageProcessor::tick()`, not a system clock.
 
 The figures in this section were measured with ESP-IDF v6.0.3 and the example's
 `sdkconfig.defaults` (`-Os`), in Espressif's QEMU emulation of the ESP32-S3
-(octal PSRAM) and the ESP32-C3. They are not yet confirmed on hardware.
+(octal PSRAM) and the ESP32-C3. The library runs on an ESP32-P4 board, but
+these figures have not been measured on hardware yet.
 [`tools/stack_probe`](../tools/stack_probe/README.md) reproduces the stack
 figures, in QEMU or on a board.
 
@@ -176,6 +177,6 @@ The adapter needs these `lv_conf.h` features: the flex layout and the widgets
 
 `a2ui_core` has no LVGL dependency. To render with another toolkit, follow
 the upstream framework adapter blueprint
-(`third_party/a2ui/blueprints/sdks/a2ui_framework_adapter.blueprint.md`) and
+(`third_party/a2ui/blueprints/modules/a2ui_framework_adapter.blueprint.md`) and
 use `components/a2ui_lvgl` as the worked example: `Surface` owns a
 `NodeResolver`, and each resolved `ComponentNode` drives one widget.

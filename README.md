@@ -19,9 +19,10 @@ dark theme. These are host renders (`make renders`), not photos of a device.*
 
 ## Status
 
-**Pre-release (0.1.0). Not yet run on real hardware.** Everything is tested on
-a Linux host against the upstream A2UI test suites, and the device build is
-compile-checked for four chips. Expect rough edges on a real board, and please
+**Pre-release (0.1.0).** It runs on an ESP32-P4 board. Everything is also
+tested on a Linux host against the upstream A2UI test suites, and the device
+build is compile-checked for four chips. Other chips and displays have not
+been tried yet; please
 [report what you find](https://github.com/faluciano/a2ui-lvgl/issues).
 
 | Check | Result |
@@ -168,8 +169,9 @@ new platform needs.
 
 ### Memory
 
-Measured in Espressif's QEMU emulation of the ESP32-S3 and ESP32-C3; not yet
-confirmed on a board.
+Measured in Espressif's QEMU emulation of the ESP32-S3 and ESP32-C3. The
+library runs on an ESP32-P4 board, but these figures have not been measured
+on hardware yet.
 
 | What | Heap | Stack |
 |---|---|---|
@@ -200,7 +202,7 @@ The full list is in [docs/adapter.md](docs/adapter.md#limitations).
 
 ## Roadmap
 
-1. Run on real boards and publish measured memory and frame rates.
+1. Publish memory and frame rates measured on real boards.
 2. A WebSocket transport and an end-to-end example with a sample agent.
 3. A compact, precompiled basic catalog for chips without PSRAM.
 4. An SDL desktop simulator.
