@@ -1,7 +1,7 @@
 # The LVGL adapter
 
 `a2ui_lvgl` draws A2UI surfaces with LVGL 9 widgets. It follows the upstream
-framework adapter blueprint (`blueprints/sdks/a2ui_framework_adapter.blueprint.md`),
+framework adapter blueprint (`third_party/a2ui/blueprints/modules/a2ui_framework_adapter.blueprint.md`),
 in its imperative form: each component has `mount`, `update` and `unmount`.
 
 ## Minimal use
