@@ -313,6 +313,7 @@ class Catalog {
   void set_source(Json j) {
     source_ = std::move(j);
     packed_ = nullptr;
+    packed_common_ = nullptr;
   }
   /**
    * The source document as a node: source(), or for a compact catalog the
@@ -335,6 +336,10 @@ class Catalog {
   std::vector<FunctionDecl> functions_;
   Json source_;
   const PackedDocument* packed_ = nullptr;
+  // The packed common types a compact catalog resolves against, set by
+  // from_packed(). Kept here so that only from_packed() refers to the packed
+  // spec tables, and a firmware that never calls it links none of them.
+  const PackedDocument* packed_common_ = nullptr;
 };
 
 }  // namespace a2ui

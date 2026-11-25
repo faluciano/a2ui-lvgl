@@ -247,24 +247,36 @@ void bind_functions(Catalog& catalog) {
   }
 }
 
-Result<CatalogPtr> load(bool compact) {
-  Result<CatalogPtr> r = compact ? Catalog::from_packed(*spec::packed(spec::Document::BasicCatalogV1))
-                                 : Catalog::from_json(Json::parse(spec::text(spec::Document::BasicCatalogV1)).value);
+namespace {
+
+// Separate functions, so that a firmware calling only the JSON path links no
+// packed tables (about 27 KB of flash), and the reverse.
+Result<CatalogPtr> load_json() {
+  Result<CatalogPtr> r = Catalog::from_json(Json::parse(spec::text(spec::Document::BasicCatalogV1)).value);
   if (r.ok()) bind_functions(*r.value());
   return r;
 }
 
-// A2UI_COMPACT_CATALOG comes from the build: CMakeLists.txt defines it for
-// CONFIG_A2UI_COMPACT_CATALOG (ESP-IDF) or the A2UI_COMPACT_CATALOG option.
-bool compact_by_default() {
-#if defined(A2UI_COMPACT_CATALOG) && A2UI_COMPACT_CATALOG
-  return true;
-#else
-  return false;
-#endif
+Result<CatalogPtr> load_packed() {
+  Result<CatalogPtr> r = Catalog::from_packed(*spec::packed(spec::Document::BasicCatalogV1));
+  if (r.ok()) bind_functions(*r.value());
+  return r;
 }
 
-Result<CatalogPtr> load() { return load(compact_by_default()); }
+}  // namespace
+
+Result<CatalogPtr> load(bool compact) { return compact ? load_packed() : load_json(); }
+
+// A2UI_COMPACT_CATALOG comes from the build: CMakeLists.txt defines it for
+// CONFIG_A2UI_COMPACT_CATALOG (ESP-IDF) or the A2UI_COMPACT_CATALOG option.
+// load() picks its path at compile time, so it links only that path.
+#if defined(A2UI_COMPACT_CATALOG) && A2UI_COMPACT_CATALOG
+bool compact_by_default() { return true; }
+Result<CatalogPtr> load() { return load_packed(); }
+#else
+bool compact_by_default() { return false; }
+Result<CatalogPtr> load() { return load_json(); }
+#endif
 
 bool is_allowed_open_url(const std::string& raw) {
   std::string url = raw;

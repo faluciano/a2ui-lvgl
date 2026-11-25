@@ -71,6 +71,11 @@ comparison.
 | Parsed into RAM | `load(false)`, or `load()` by default | 150 KB | |
 | The 0.1.0 snippet | `Catalog::from_json(*spec::parsed(...))` | 225 KB | |
 
+The tables are linked only into a firmware that loads a compact catalog:
+through `Catalog::from_packed`, `load(true)`, or `load()` with the option on.
+`load()` with the option off and `Catalog::from_json` link none of them;
+`load(bool)` links both forms.
+
 The compact form is `Catalog::from_packed(*spec::packed(Document::BasicCatalogV1))`.
 `tools/embed_spec_documents.py` flattens the catalog and the common types
 into constant tables (`PackedDocument`, `a2ui/schema_node.h`): nodes of two
