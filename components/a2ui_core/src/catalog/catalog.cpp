@@ -142,10 +142,7 @@ SchemaNode Catalog::resolve_catalog_pointer(std::string_view pointer) const {
 }
 
 SchemaNode Catalog::common_types_node() const {
-  if (packed_) {
-    const PackedDocument* common = spec::packed_common_types(protocol_version_);
-    return common ? SchemaNode::root(*common) : SchemaNode();
-  }
+  if (packed_) return packed_common_ ? SchemaNode::root(*packed_common_) : SchemaNode();
   // spec::common_types keeps the parsed document for the program's lifetime.
   return SchemaNode(spec::common_types(protocol_version_).get());
 }
@@ -153,9 +150,7 @@ SchemaNode Catalog::common_types_node() const {
 SchemaRegistry Catalog::schema_registry() const {
   SchemaRegistry reg;
   if (packed_) {
-    if (const PackedDocument* common = spec::packed_common_types(protocol_version_)) {
-      reg.add("common_types.json", *common);
-    }
+    if (packed_common_) reg.add("common_types.json", *packed_common_);
   } else if (auto common = spec::common_types(protocol_version_)) {
     reg.add("common_types.json", common);
   }

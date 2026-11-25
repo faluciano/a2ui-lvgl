@@ -34,6 +34,8 @@ void bind_functions(Catalog& catalog);
  * Validation gives the same results either way.
  */
 Result<CatalogPtr> load(bool compact);
+// load(bool) can take either path, so it links both the packed tables and
+// the catalog text; load() links only the one the build chose.
 
 /**
  * load() with the build's choice: compact when CONFIG_A2UI_COMPACT_CATALOG

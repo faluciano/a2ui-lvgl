@@ -883,6 +883,7 @@ Result<CatalogPtr> Catalog::from_packed(const PackedDocument& document, std::str
   catalog->declared_protocol_version_ = checked.declared;
   catalog->packed_ = &document;
   const PackedDocument* common = spec::packed_common_types(checked.version);
+  catalog->packed_common_ = common;
   const ClassifyCtx ctx{root["$defs"], common ? SchemaNode::root(*common) : SchemaNode()};
 
   for (const auto& m : root["components"].members()) {

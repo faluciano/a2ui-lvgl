@@ -7,6 +7,15 @@ minor versions may change the API.
 
 Tracks upstream A2UI at c26be2dd (was 58379ad4).
 
+- The packed tables of the compact catalog are linked only when a compact
+  catalog is loaded (`Catalog::from_packed`, `load(true)`, or `load()` with
+  `CONFIG_A2UI_COMPACT_CATALOG`). Before, `Catalog::schema_registry()`
+  referred to them for every catalog and `load()` chose its path at run
+  time, so a firmware with the option off still linked up to 44 KB of
+  them. On the ESP32-P4, `liba2ui_core.a` `.rodata`: `basic_surface`
+  (`load()`) 103,271 B to 59,297 B, all three tables; `agent_surface`
+  (`Catalog::from_json`) 86,587 B to 59,325 B, the common types and the
+  string pool. `load(bool)` still links both paths.
 - `MessageProcessor::add_catalog()` adds a catalog after construction
   (upstream #3304). Surfaces created afterwards can use it, renderer
   function calls resolve it and `get_renderer_capabilities()` lists it.
