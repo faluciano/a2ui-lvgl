@@ -46,7 +46,7 @@ headless LVGL display, with both kinds of catalog: 36 of 36 pass each time.
 
 ## Unit tests
 
-`make unit` runs 107 tests of the core. `make lvgl-smoke` runs 165 checks of
+`make unit` runs 110 tests of the core. `make lvgl-smoke` runs 165 checks of
 the adapter. Formatting output is compared with golden values generated from
 Node's `Intl` (`tools/gen_intl_golden.mjs`).
 

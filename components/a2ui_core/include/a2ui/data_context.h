@@ -33,6 +33,9 @@ enum class AgentCallStatus : uint8_t {
 };
 
 /** What a DataContext needs from its surface (or a test fixture). */
+/** How validate_function_args treats null argument values. */
+enum class ArgsCheck : uint8_t { Strict, AcceptNull };
+
 class FunctionHost {
  public:
   virtual ~FunctionHost() = default;
@@ -49,9 +52,13 @@ class FunctionHost {
 
   /**
    * Validates resolved arguments against a function's args schema. The
-   * default accepts everything; the schema layer overrides it.
+   * default accepts everything; the schema layer overrides it. With
+   * ArgsCheck::AcceptNull, null argument values (a data binding whose path
+   * has no value yet) pass, as the Swift core does for calls the renderer
+   * runs itself; agent-bound and callRendererFunction arguments stay strict.
    */
-  virtual Status validate_function_args(const FunctionApi& api, const Json& args) {
+  virtual Status validate_function_args(const FunctionApi& api, const Json& args,
+                                        ArgsCheck check = ArgsCheck::Strict) {
     return ok_status();
   }
 

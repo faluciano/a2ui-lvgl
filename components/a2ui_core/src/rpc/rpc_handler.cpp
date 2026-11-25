@@ -25,6 +25,14 @@ Error rpc_error(const char* code, std::string message, std::string function_call
 
 namespace {
 
+/** Validator options for a function's arguments under `check`. */
+SchemaValidateOptions args_options(ArgsCheck check) {
+  SchemaValidateOptions options;
+  options.accept_null_properties = check == ArgsCheck::AcceptNull;
+  return options;
+}
+
+
 constexpr const char* kUnresolvedArgumentMessage = "An argument of the function call could not be resolved.";
 constexpr const char* kExecutionFailedMessage = "An error occurred during function execution.";
 
@@ -87,16 +95,16 @@ class InboundCallHost : public FunctionHost {
     if (surface_) surface_->report_function_error(error, function_name);
   }
 
-  Status validate_function_args(const FunctionApi& api, const Json& args) override {
+  Status validate_function_args(const FunctionApi& api, const Json& args, ArgsCheck check) override {
     if (surface_) {
       // A function of a processor catalog the surface does not hold is
       // validated against its own catalog below.
       for (const auto& entry : surface_->available_catalogs()) {
         const FunctionDecl* d = entry.second->find_function(api.name);
-        if (d && &d->api == &api) return surface_->validate_function_args(api, args);
+        if (d && &d->api == &api) return surface_->validate_function_args(api, args, check);
       }
     }
-    return validate_against_catalog(api, args);
+    return validate_against_catalog(api, args, check);
   }
 
   Status open_url(const std::string& url) override {
@@ -104,7 +112,7 @@ class InboundCallHost : public FunctionHost {
   }
 
   /** Validates `args` against `api.args_schema` with the documents of the catalog declaring it. */
-  Status validate_against_catalog(const FunctionApi& api, const Json& args) const {
+  Status validate_against_catalog(const FunctionApi& api, const Json& args, ArgsCheck check) const {
     const SchemaNode schema = api.args_schema_node();
     if (!schema.is_object() || !(schema.contains("type") || schema.contains("properties"))) return ok_status();
     auto validate_in = [&](const Catalog& cat) -> std::optional<Status> {
@@ -112,7 +120,7 @@ class InboundCallHost : public FunctionHost {
       if (!d || &d->api != &api) return std::nullopt;
       if (!cat.is_v1()) return ok_status();
       SchemaRegistry reg = cat.schema_registry();
-      return validate_schema(reg, "catalog.json", schema, args);
+      return validate_schema(reg, "catalog.json", schema, args, nullptr, args_options(check));
     };
     if (auto s = validate_in(*matched_)) return *s;
     for (const auto& c : catalogs_) {
@@ -368,7 +376,7 @@ Json RpcHandler::handle_call_renderer_function(const InternalOperation& op, Surf
   if (const Error* e = host.captured()) {
     return fail(rpc_code::kExecutionError, is_blank(e->message) ? kUnresolvedArgumentMessage : e->message);
   }
-  if (!host.validate_function_args(decl->api, args).ok()) {
+  if (!host.validate_function_args(decl->api, args, ArgsCheck::Strict).ok()) {
     return fail(rpc_code::kInvalidFunctionCall, "Invalid arguments for function '" + name + "'.");
   }
   args = apply_schema_defaults(decl->api.args_schema_node(), args);

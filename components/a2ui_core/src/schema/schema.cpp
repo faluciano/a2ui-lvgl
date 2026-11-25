@@ -404,6 +404,13 @@ class Validator {
   std::string path;
 
   bool eval(int doc, SchemaNode schema, const Json& inst, Annot* annot, bool report, int depth) {
+    // Null relaxation (SchemaValidateOptions::accept_null_properties): the
+    // caller sets next_ for this call only; scope_ is this call's scope while
+    // it runs and is restored on return.
+    const NullScope mine = next_;
+    next_ = NullScope::None;
+    const ScopeGuard guard(&scope_, mine);
+    if (mine == NullScope::Value && inst.is_null()) return true;
     if (schema.is_bool()) {
       if (schema.as_bool()) return true;
       if (report) add_issue("false", "no value is allowed here");
@@ -497,6 +504,7 @@ class Validator {
     if (SchemaNode all = schema.find("allOf"); all.is_array()) {
       for (SchemaNode sub : all.items()) {
         Annot a;
+        next_ = combiner_scope();
         if (eval(doc, sub, inst, &a, report, depth + 1)) {
           local.merge(a);
         } else {
@@ -508,6 +516,7 @@ class Validator {
       bool ok = false;
       for (SchemaNode sub : any.items()) {
         Annot a;
+        next_ = combiner_scope();
         if (eval(doc, sub, inst, &a, false, depth + 1)) {
           ok = true;
           local.merge(a);  // Every passing branch contributes annotations.
@@ -526,6 +535,7 @@ class Validator {
       Annot first;
       for (SchemaNode sub : one.items()) {
         Annot a;
+        next_ = combiner_scope();
         if (eval(doc, sub, inst, &a, false, depth + 1)) {
           if (++matched == 1) first = std::move(a);
           if (matched > 1) break;
@@ -654,6 +664,7 @@ class Validator {
     }
     if (candidates == 1) {
       Annot ignored;
+      next_ = combiner_scope();
       eval(doc, candidate, inst, &ignored, true, depth + 1);
     }
   }
@@ -773,6 +784,7 @@ class Validator {
     path += '/';
     path += escape_pointer_token(key);
     const size_t before = issues.size();
+    if (std::string_view(keyword) == "properties" && scope_ != NullScope::None) next_ = NullScope::Value;
     const bool ok = eval(doc, sub, value, nullptr, report, depth + 1);
     if (!ok && report && issues.size() == before) {
       add_issue(keyword, sub.is_bool() ? "property '" + key + "' is not allowed"
@@ -792,6 +804,7 @@ class Validator {
     const size_t mark = path.size();
     path += '/';
     path += std::to_string(index);
+    if (std::string_view(keyword) == "items" && scope_ == NullScope::Value) next_ = NullScope::Value;
     const bool ok = eval(doc, sub, value, nullptr, report, depth + 1);
     if (!ok && report && sub.is_bool() && !issues.empty() && issues.back().keyword == std::string("false")) {
       issues.back().keyword = keyword;
@@ -974,6 +987,28 @@ class Validator {
 
   const SchemaRegistry& reg_;
   const SchemaValidateOptions& opt_;
+
+ public:
+  /**
+   * Where null is accepted under accept_null_properties, mirroring the
+   * Swift core's allowingNullValues / acceptingNull schema rewrite:
+   * Root is the arguments object (its properties become Value, its
+   * allOf/anyOf/oneOf branches stay Root); a Value position accepts null
+   * and passes Value on to its own properties and items. $ref targets and
+   * other keywords are evaluated as written.
+   */
+  enum class NullScope : uint8_t { None, Root, Value };
+  NullScope next_ = NullScope::None;
+
+ private:
+  NullScope scope_ = NullScope::None;
+  NullScope combiner_scope() const { return scope_ == NullScope::Root ? NullScope::Root : NullScope::None; }
+  struct ScopeGuard {
+    ScopeGuard(NullScope* slot, NullScope value) : slot_(slot), saved_(*slot) { *slot = value; }
+    ~ScopeGuard() { *slot_ = saved_; }
+    NullScope* slot_;
+    NullScope saved_;
+  };
 };
 
 Status finish(Validator& v, bool ok, std::vector<ValidationIssue>* issues) {
@@ -998,6 +1033,7 @@ Status validate_schema(const SchemaRegistry& registry, std::string_view doc_name
                        std::vector<ValidationIssue>* issues, const SchemaValidateOptions& options) {
   Validator v(registry, options);
   const int doc = registry.find_document(doc_name);
+  if (options.accept_null_properties) v.next_ = Validator::NullScope::Root;
   const bool ok = v.eval(doc, schema, instance, nullptr, true, 0);
   return finish(v, ok, issues);
 }
