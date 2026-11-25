@@ -33,6 +33,16 @@ bool valid(const char* schema, const char* instance, std::vector<ValidationIssue
   return a2ui::validate_schema(reg, "test.json", *d, J(instance), issues).ok();
 }
 
+// Same, with SchemaValidateOptions::accept_null_properties.
+bool valid_null_ok(const char* schema, const char* instance) {
+  SchemaRegistry reg;
+  auto d = doc(schema);
+  reg.add("test.json", d);
+  a2ui::SchemaValidateOptions options;
+  options.accept_null_properties = true;
+  return a2ui::validate_schema(reg, "test.json", *d, J(instance), nullptr, options).ok();
+}
+
 bool matches(const char* pattern, const char* text) { return a2ui::schema_pattern::search(pattern, text); }
 
 }  // namespace
@@ -320,4 +330,42 @@ TEST(schema_pattern_matcher) {
   EXPECT_TRUE(!ok);
   // Long single-character runs are matched without deep recursion.
   EXPECT_TRUE(matches("^[a-z]*$", std::string(20000, 'q').c_str()));
+}
+
+// The Swift core's relaxed argument check (DataContext.areLocalArgumentsValid):
+// null passes for each property of the arguments object, through top-level
+// allOf/anyOf/oneOf, and for the properties and items of those values.
+TEST(schema_accept_null_properties) {
+  const char* args = R"({"type":"object","properties":{
+      "value":{"type":"number"},
+      "mode":{"enum":["a","b"]},
+      "ref":{"$ref":"#/$defs/S"},
+      "list":{"type":"array","items":{"type":"string"}},
+      "obj":{"type":"object","properties":{"inner":{"type":"boolean"}}}},
+    "required":["value"],
+    "$defs":{"S":{"type":"object","properties":{"deep":{"type":"string"}}}}})";
+  // Strict by default.
+  EXPECT_TRUE(!valid(args, R"({"value":null})"));
+  // Each property, whatever its schema.
+  EXPECT_TRUE(valid_null_ok(args, R"({"value":null})"));
+  EXPECT_TRUE(valid_null_ok(args, R"({"value":1,"mode":null,"ref":null,"list":null,"obj":null})"));
+  // The properties and items of a property's value.
+  EXPECT_TRUE(valid_null_ok(args, R"({"value":1,"list":["x",null],"obj":{"inner":null}})"));
+  // Non-null values are still checked, and required still applies.
+  EXPECT_TRUE(!valid_null_ok(args, R"({"value":"one"})"));
+  EXPECT_TRUE(!valid_null_ok(args, R"({"value":1,"mode":"c"})"));
+  EXPECT_TRUE(!valid_null_ok(args, R"({})"));
+  // A $ref target is checked as written: Swift relaxes the arguments schema,
+  // not the documents it refers to.
+  EXPECT_TRUE(!valid_null_ok(args, R"({"value":1,"ref":{"deep":null}})"));
+  // The arguments object itself must not be null.
+  EXPECT_TRUE(!valid_null_ok(args, "null"));
+  // Top-level combiners keep the arguments-object scope.
+  const char* any_of = R"({"anyOf":[{"type":"object","properties":{"a":{"type":"number"}},"required":["a"]},
+                                    {"type":"object","properties":{"b":{"type":"string"}},"required":["b"]}]})";
+  EXPECT_TRUE(!valid(any_of, R"({"a":null})"));
+  EXPECT_TRUE(valid_null_ok(any_of, R"({"a":null})"));
+  EXPECT_TRUE(valid_null_ok(any_of, R"({"b":null})"));
+  // additionalProperties is not relaxed, as in Swift.
+  EXPECT_TRUE(!valid_null_ok(R"({"type":"object","additionalProperties":{"type":"number"}})", R"({"x":null})"));
 }

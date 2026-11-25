@@ -20,6 +20,14 @@
 namespace a2ui {
 namespace {
 
+/** Validator options for a function's arguments under `check`. */
+SchemaValidateOptions args_options(ArgsCheck check) {
+  SchemaValidateOptions options;
+  options.accept_null_properties = check == ArgsCheck::AcceptNull;
+  return options;
+}
+
+
 double system_seconds() {
 #if defined(__unix__) || defined(__APPLE__) || defined(ESP_PLATFORM)
   timeval tv{};
@@ -266,7 +274,7 @@ void SurfaceModel::report_function_error(const Error& error, const std::string& 
   dispatch_error(std::move(payload));
 }
 
-Status SurfaceModel::validate_function_args(const FunctionApi& api, const Json& args) {
+Status SurfaceModel::validate_function_args(const FunctionApi& api, const Json& args, ArgsCheck check) {
   const SchemaNode schema = api.args_schema_node();
   if (!schema.is_object() || !(schema.contains("type") || schema.contains("properties"))) return ok_status();
   // The catalog that declares this function provides the schema documents.
@@ -276,7 +284,7 @@ Status SurfaceModel::validate_function_args(const FunctionApi& api, const Json& 
     if (!decl || &decl->api != &api) continue;
     if (!cat.is_v1()) return ok_status();
     SchemaRegistry reg = cat.schema_registry();
-    return validate_schema(reg, "catalog.json", schema, args);
+    return validate_schema(reg, "catalog.json", schema, args, nullptr, args_options(check));
   }
   return ok_status();
 }

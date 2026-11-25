@@ -121,6 +121,15 @@ struct SchemaValidateOptions {
   int max_depth = 64;
   /** Stop collecting after this many issues (validation still fails). */
   size_t max_issues = 16;
+  /**
+   * Validates an arguments object the way the Swift core checks local
+   * function arguments: null is accepted for each of the object's
+   * properties (also through its top-level allOf/anyOf/oneOf), and
+   * recursively for the properties and items of those values. A data
+   * binding whose path has no value yet resolves to null, and the function
+   * decides what null means. Used by validate_schema() only.
+   */
+  bool accept_null_properties = false;
 };
 
 /**

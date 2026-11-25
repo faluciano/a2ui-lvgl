@@ -125,8 +125,8 @@ class ActionHost : public FunctionHost {
   void report_function_error(const Error& error, const std::string& function_name) override {
     surface_.report_function_error(error, function_name);
   }
-  Status validate_function_args(const FunctionApi& api, const Json& args) override {
-    return surface_.validate_function_args(api, args);
+  Status validate_function_args(const FunctionApi& api, const Json& args, ArgsCheck check) override {
+    return surface_.validate_function_args(api, args, check);
   }
   bool routes_to_agent() const override { return surface_.routes_to_agent(); }
   Status open_url(const std::string& url) override { return surface_.open_url(url); }
@@ -425,8 +425,8 @@ void AgentCallTracker::report_function_error(const Error& error, const std::stri
   surface_->report_function_error(error, function_name);
 }
 
-Status AgentCallTracker::validate_function_args(const FunctionApi& api, const Json& args) {
-  return surface_->validate_function_args(api, args);
+Status AgentCallTracker::validate_function_args(const FunctionApi& api, const Json& args, ArgsCheck check) {
+  return surface_->validate_function_args(api, args, check);
 }
 
 bool AgentCallTracker::routes_to_agent() const { return surface_->routes_to_agent(); }

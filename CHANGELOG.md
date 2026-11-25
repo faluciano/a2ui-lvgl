@@ -7,6 +7,19 @@ minor versions may change the API.
 
 Tracks upstream A2UI at c26be2dd (was 58379ad4).
 
+- Function calls the renderer runs itself accept `null` arguments, as the
+  Swift core does (`DataContext.areLocalArgumentsValid`, upstream #3741). A
+  data binding whose path has no value yet resolves to `null`; the argument
+  check rejected that against `type: number` or `string` and reported
+  `EXPRESSION_ERROR "the arguments do not match its schema"`, which a
+  transport forwards to the agent. Every upstream example that sends its
+  data model after its components (coffee-order, login-form and others) did
+  this on its first render. Null now passes for each argument and,
+  recursively, for the properties and items of argument values; other
+  values are checked as before. Calls routed to the agent and
+  `callRendererFunction` keep the strict check, as in Swift. New
+  `SchemaValidateOptions::accept_null_properties`; `validate_function_args`
+  takes an `ArgsCheck`.
 - `MessageProcessor::add_catalog()` adds a catalog after construction
   (upstream #3304). Surfaces created afterwards can use it, renderer
   function calls resolve it and `get_renderer_capabilities()` lists it.

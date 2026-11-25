@@ -5,7 +5,9 @@
 // node identity across data and definition changes, notification counts,
 // subscription cleanup (leak checks) and the adapter-facing helpers.
 
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -350,4 +352,70 @@ TEST(metadata_updates_do_not_touch_props) {
   EXPECT_EQ(meta, 1);
   EXPECT_EQ(c.props, 0);
   EXPECT_EQ(root->metadata(), parse(R"({"extensions":{"com_x":"1"}})"));
+}
+
+// Upstream examples send createSurface, then updateComponents, then
+// updateDataModel. A view mounts as soon as the surface exists, so the first
+// resolve runs before the data arrives and every @path argument is null.
+// Calls the renderer runs itself must leave those nulls to the function (as
+// the Swift core does) instead of reporting EXPRESSION_ERROR, which a
+// transport forwards to the agent. Checked with both catalog loaders.
+TEST(examples_resolve_without_errors_before_their_data_arrives) {
+  for (const char* name : {"coffee-order", "login-form"}) {
+    const std::string path = std::string("third_party/a2ui/catalogs/basic/v1/examples/") + name + ".json";
+    std::ifstream in(path, std::ios::binary);
+    EXPECT_TRUE(static_cast<bool>(in));
+    if (!in) continue;
+    std::stringstream text;
+    text << in.rdbuf();
+    const Json doc = Json::parse(text.str()).value;
+    for (bool compact : {false, true}) {
+      auto cat = a2ui::basic_catalog::load(compact);
+      EXPECT_TRUE(cat.ok());
+      if (!cat.ok()) continue;
+      MessageProcessor p({cat.value()});
+      std::vector<std::string> errors;
+      std::vector<a2ui::Subscription> subs;
+      std::vector<std::unique_ptr<NodeResolver>> resolvers;
+      auto created = p.model().on_surface_created().subscribe([&](a2ui::SurfaceModel* const& s) {
+        subs.push_back(s->on_error().subscribe([&](const Json& e) { errors.push_back(e.dump()); }));
+        resolvers.push_back(std::make_unique<NodeResolver>(*s));
+      });
+      for (const auto& m : doc["messages"].as_array()) EXPECT_TRUE(p.process_messages(m).ok());
+      EXPECT_TRUE(!resolvers.empty() && resolvers.front()->root() != nullptr);
+      for (const auto& e : errors) unit::report_failure(__FILE__, __LINE__, std::string(name) + ": " + e);
+    }
+  }
+}
+
+// Only calls the renderer runs itself are relaxed: callRendererFunction from
+// the agent still rejects a null argument, as the Swift core's RPC handler does.
+TEST(call_renderer_function_still_rejects_null_arguments) {
+  auto cat = a2ui::Catalog::from_json(Json::parse(R"({
+      "protocolVersion":"1.0","catalogId":"test/rpc","components":{},
+      "functions":{"double":{"type":"object","allowedCallers":"rendererOrAgent","returnType":"number",
+        "properties":{"@call":{"const":"double"},
+          "args":{"type":"object","properties":{"value":{"type":"number"}},"required":["value"]}},
+        "required":["@call","args"]}}})").value);
+  EXPECT_TRUE(cat.ok());
+  if (!cat.ok()) return;
+  int runs = 0;
+  EXPECT_TRUE(cat.value()->bind_function("double", [&runs](const Json& args, a2ui::FunctionContext&) -> a2ui::Result<Json> {
+    ++runs;
+    return Json(args["value"].as_number() * 2);
+  }).ok());
+  std::vector<Json> out;
+  a2ui::MessageProcessorOptions options;
+  options.outbound_listener = [&](const Json& m) { out.push_back(m); };
+  MessageProcessor p({cat.value()}, std::move(options));
+  auto call = [&](const char* value) {
+    out.clear();
+    const std::string msg = std::string(R"({"version":"1.0","callRendererFunction":{"functionCallId":"c1",
+        "callFunction":{"@call":"double","catalogId":"test/rpc","args":{"value":)") + value + "}}}}";
+    EXPECT_TRUE(p.process_messages(Json::parse(msg).value).ok());
+    return out.empty() ? std::string() : out.back().dump();
+  };
+  EXPECT_TRUE(call("21").find("42") != std::string::npos);
+  EXPECT_TRUE(call(R"({"@path":"/missing"})").find("INVALID_FUNCTION_CALL") != std::string::npos);
+  EXPECT_EQ(runs, 1);
 }

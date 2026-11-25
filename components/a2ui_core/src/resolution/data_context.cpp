@@ -291,7 +291,9 @@ Json DataContext::evaluate_call(const std::string& name, const Json& call) {
   Json args;
   if (!resolve_arguments(call, &args)) return nullptr;
   args = coerce_validation_results(decl->api.args_schema_node(), args);
-  if (auto v = host_->validate_function_args(decl->api, args); !v.ok()) {
+  // The renderer runs this call itself: a null argument (a binding with no
+  // value yet) is left for the function to handle, as in the Swift core.
+  if (auto v = host_->validate_function_args(decl->api, args, ArgsCheck::AcceptNull); !v.ok()) {
     fail(function_errors::invalid_arguments(name), name);
     return nullptr;
   }

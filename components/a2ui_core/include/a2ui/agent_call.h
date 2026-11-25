@@ -169,7 +169,7 @@ class AgentCallTracker : public FunctionHost {
   Result<const Catalog*> resolve_function_catalog(const std::string* catalog_id,
                                                   const std::string& function_name) override;
   void report_function_error(const Error& error, const std::string& function_name) override;
-  Status validate_function_args(const FunctionApi& api, const Json& args) override;
+  Status validate_function_args(const FunctionApi& api, const Json& args, ArgsCheck check) override;
   bool routes_to_agent() const override;
   AgentCallStatus agent_function_value(const std::string& name, const std::string& catalog_id, const Json& args,
                                        Json* value) override;
