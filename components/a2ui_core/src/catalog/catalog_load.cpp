@@ -466,14 +466,36 @@ PropertyKind classify_property(const ClassifyCtx& ctx, const Json& prop, bool in
     follow_ref(ctx, items["$ref"].as_string(), &c, &def);
     if (def == "CheckRule") return PropertyKind::Checks;
   }
+  // An inline union with a DataBinding or FunctionCall branch is dynamic. Its
+  // literal branches give the type it coerces to: {type: boolean} next to the
+  // binding makes it a DynamicBoolean, as the common Dynamic* defs are.
   for (const char* kw : {"oneOf", "anyOf"}) {
+    bool dynamic = false;
+    PropertyKind literal = PropertyKind::DynamicValue;
+    bool mixed = false;  // Literal branches of more than one kind.
+    bool any_literal = false;
     for (const auto& member : prop[kw].as_array()) {
-      if (!member["$ref"].is_string()) continue;
-      bool c = in_common;
-      std::string def;
-      follow_ref(ctx, member["$ref"].as_string(), &c, &def);
-      if (def == "DataBinding" || def == "FunctionCall") return PropertyKind::DynamicValue;
+      if (member["$ref"].is_string()) {
+        bool c = in_common;
+        std::string def;
+        follow_ref(ctx, member["$ref"].as_string(), &c, &def);
+        dynamic = dynamic || def == "DataBinding" || def == "FunctionCall";
+        continue;
+      }
+      const Json& type = member["type"];
+      if (!type.is_string()) continue;
+      const std::string& t = type.as_string();
+      PropertyKind k = PropertyKind::DynamicValue;
+      if (t == "boolean") k = PropertyKind::DynamicBoolean;
+      else if (t == "string") k = PropertyKind::DynamicString;
+      else if (t == "number" || t == "integer") k = PropertyKind::DynamicNumber;
+      else if (t == "array" && member["items"]["type"].is_string() && member["items"]["type"].as_string() == "string")
+        k = PropertyKind::DynamicStringList;
+      mixed = mixed || (any_literal && k != literal);
+      literal = k;
+      any_literal = true;
     }
+    if (dynamic) return any_literal && !mixed ? literal : PropertyKind::DynamicValue;
   }
   return PropertyKind::Static;
 }

@@ -3,6 +3,26 @@
 This project follows [Semantic Versioning](https://semver.org). Until 1.0.0,
 minor versions may change the API.
 
+## Unreleased
+
+Tracks upstream A2UI at c26be2dd (was 58379ad4).
+
+- `MessageProcessor::add_catalog()` adds a catalog after construction
+  (upstream #3304). Surfaces created afterwards can use it, renderer
+  function calls resolve it and `get_renderer_capabilities()` lists it.
+  Surfaces created earlier keep the catalogs they were created with, so a
+  component on one of them that names the new catalog fails with a catalog
+  error. Adding an id the processor already holds is an error.
+- A component's `catalogId` now resolves only against the catalogs its
+  surface holds, as upstream does.
+- A property declared as an inline union of a literal type with
+  `DataBinding` or `FunctionCall` (for example
+  `oneOf: [{type: boolean}, DataBinding, FunctionCall]`) now coerces to that
+  type, as a `DynamicBoolean` does. Before, a bound ValidationResult came
+  back as an object instead of `false` (upstream #4251).
+- The conformance harness supports `addCatalogPaths` steps and finds the
+  v0.9.1 fixtures at their new upstream location.
+
 ## 0.1.0
 
 First public release. Runs on an ESP32-P4 board.

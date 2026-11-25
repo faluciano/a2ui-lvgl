@@ -144,6 +144,34 @@ CatalogPtr inline_catalog(const Json& spec, const std::string& id, const std::st
   return basic_alias(id, false);
 }
 
+/** Loads the catalog at a repository-relative path (as addCatalogPaths names them). */
+CatalogPtr load_catalog_path(const std::string& path, const harness::Context& ctx, const std::string& version,
+                             std::string* error) {
+  Json doc = harness::load_json_file(ctx.repo_path(path), error);
+  if (!doc.is_object()) return nullptr;
+  std::string id = str(doc["catalogId"]);
+  if (id.empty()) id = str(doc["id"]);
+  if (id.empty()) id = "test-catalog";
+  std::string v = str(doc["protocolVersion"]);
+  if (v.empty()) v = path.find("v0_9") != std::string::npos ? "v0.9" : version;
+  return from_json_or_note(doc, id, v, error);
+}
+
+/** Ids of the catalogs that the case's steps add with addCatalogPaths. */
+std::set<std::string> added_catalog_ids(const Json& tc, const harness::Context& ctx) {
+  std::set<std::string> ids;
+  for (const auto& step : tc["steps"].as_array()) {
+    for (const auto& p : step["addCatalogPaths"].as_array()) {
+      std::string err;
+      Json doc = harness::load_json_file(ctx.repo_path(str(p)), &err);
+      std::string id = str(doc["catalogId"]);
+      if (id.empty()) id = str(doc["id"]);
+      if (!id.empty()) ids.insert(id);
+    }
+  }
+  return ids;
+}
+
 CaseCatalogs catalogs_for_case(const Json& tc, const harness::Context& ctx) {
   CaseCatalogs out;
   const std::string version = case_version(tc);
@@ -222,6 +250,8 @@ CaseCatalogs catalogs_for_case(const Json& tc, const harness::Context& ctx) {
     ensure("basic", basic_alias("basic", true));
   }
   if (!is_catalog_error_case(tc)) {
+    // A catalog a step adds gets no stand-in under its id.
+    const std::set<std::string> added = added_catalog_ids(tc, ctx);
     std::vector<const Json*> msgs;
     if (tc.contains("messages")) collect_messages(tc["messages"], &msgs);
     if (tc.contains("payload")) collect_messages(tc["payload"], &msgs);
@@ -235,7 +265,7 @@ CaseCatalogs catalogs_for_case(const Json& tc, const harness::Context& ctx) {
       const std::string id = cs["catalogId"].as_string();
       const std::string v = (*m)["version"].is_string() ? a2ui::normalize_protocol_version((*m)["version"].as_string())
                                                         : version;
-      if (v == "1.0") ensure(id, basic_alias(id, false));
+      if (v == "1.0" && !added.count(id)) ensure(id, basic_alias(id, false));
     }
   }
   out.list = specified;
@@ -775,6 +805,25 @@ HARNESS_ACTION("process_messages", run_process_messages) {
     const Json& expected = step.contains("expect") ? step["expect"] : (last ? test_case["expect"] : Json());
     a2ui::ExecutionContext ec;
     if (step.contains("validationConfig")) ec.validation_config = config_from_flags(step["validationConfig"]);
+    // addCatalogPaths: each catalog goes to add_catalog before the step's messages.
+    bool add_failed = false;
+    for (const auto& p : step["addCatalogPaths"].as_array()) {
+      std::string err;
+      CatalogPtr c = load_catalog_path(str(p), ctx, case_version(test_case), &err);
+      if (!c) return Outcome::fail("step " + std::to_string(i) + ": catalog load failed: " + err);
+      a2ui::Status s = r.processor->add_catalog(c);
+      if (s.ok()) continue;
+      if (!expect_error) return Outcome::fail("step " + std::to_string(i) + ": addCatalog failed: " + describe(s.error()));
+      Outcome o = check_full_error(s.error(), *expect_error, r.renderer_errors);
+      if (!o.passed()) return Outcome::fail("step " + std::to_string(i) + ": " + o.detail);
+      add_failed = true;
+      break;
+    }
+    if (add_failed) continue;
+    if (!step.contains("messages") && !step.contains("payload") && !step.contains("message")) {
+      if (expect_error) return Outcome::fail("step " + std::to_string(i) + ": " + harness::missing_error(*expect_error).detail);
+      continue;
+    }
     Outcome o = run_step(step_messages(step), expect_error, expected, ec);
     if (!o.passed()) return Outcome::fail("step " + std::to_string(i) + ": " + o.detail);
   }
