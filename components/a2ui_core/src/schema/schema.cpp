@@ -35,6 +35,77 @@ std::string escape_pointer_token(std::string_view token) {
 
 namespace {
 
+// --- format: date, time, date-time ------------------------------------------------
+//
+// The basic catalog tells date, time and date-time strings apart with a
+// oneOf of `format`s (DateTimeInput min/max), which works only when those
+// formats assert. They are checked as the ISO 8601 shapes the catalog uses
+// ("yyyy-MM-dd", "HH:mm[:ss[.fff]]" with an optional zone, and the two
+// joined by 'T'); every other format stays an annotation.
+
+bool digits_at(std::string_view s, size_t pos, size_t n, int* out) {
+  if (pos + n > s.size()) return false;
+  int v = 0;
+  for (size_t i = 0; i < n; ++i) {
+    const char c = s[pos + i];
+    if (c < '0' || c > '9') return false;
+    v = v * 10 + (c - '0');
+  }
+  *out = v;
+  return true;
+}
+
+bool is_iso_date(std::string_view s) {
+  int y = 0, m = 0, d = 0;
+  if (s.size() != 10 || s[4] != '-' || s[7] != '-' || !digits_at(s, 0, 4, &y) || !digits_at(s, 5, 2, &m) ||
+      !digits_at(s, 8, 2, &d) || m < 1 || m > 12 || d < 1) {
+    return false;
+  }
+  static const int kDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  const bool leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+  return d <= (m == 2 && leap ? 29 : kDays[m - 1]);
+}
+
+/** HH:mm[:ss[.f+]] followed by an optional Z, ±HH, ±HHmm or ±HH:mm. */
+bool is_iso_time(std::string_view s) {
+  int h = 0, mi = 0, sec = 0;
+  if (s.size() < 5 || s[2] != ':' || !digits_at(s, 0, 2, &h) || !digits_at(s, 3, 2, &mi) || h > 23 || mi > 59) {
+    return false;
+  }
+  size_t pos = 5;
+  if (pos < s.size() && s[pos] == ':') {
+    if (!digits_at(s, pos + 1, 2, &sec) || sec > 60) return false;  // 60: leap second.
+    pos += 3;
+    if (pos < s.size() && s[pos] == '.') {
+      const size_t start = ++pos;
+      while (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') ++pos;
+      if (pos == start) return false;
+    }
+  }
+  if (pos == s.size()) return true;
+  if (s[pos] == 'Z' || s[pos] == 'z') return pos + 1 == s.size();
+  if (s[pos] != '+' && s[pos] != '-') return false;
+  const std::string_view zone = s.substr(pos + 1);
+  int zh = 0, zm = 0;
+  if (!digits_at(zone, 0, 2, &zh) || zh > 23) return false;
+  if (zone.size() == 2) return true;
+  if (zone.size() == 4) return digits_at(zone, 2, 2, &zm) && zm <= 59;
+  return zone.size() == 5 && zone[2] == ':' && digits_at(zone, 3, 2, &zm) && zm <= 59;
+}
+
+bool is_iso_date_time(std::string_view s) {
+  return s.size() > 11 && (s[10] == 'T' || s[10] == 't') && is_iso_date(s.substr(0, 10)) &&
+         is_iso_time(s.substr(11));
+}
+
+/** False when `str` fails an asserted format; true for formats kept as annotations. */
+bool format_holds(const std::string& format, std::string_view str) {
+  if (format == "date") return is_iso_date(str);
+  if (format == "time") return is_iso_time(str);
+  if (format == "date-time") return is_iso_date_time(str);
+  return true;
+}
+
 int hex_value(char c) {
   if (c >= '0' && c <= '9') return c - '0';
   if (c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -616,6 +687,10 @@ class Validator {
         if (report) add_issue("maxLength", "string is longer than " + max_len->dump());
         ok = false;
       }
+    }
+    if (const Json* f = s.find("format"); f && f->is_string() && !format_holds(f->as_string(), str)) {
+      if (report) add_issue("format", short_dump(Json(str)) + " is not a valid " + f->as_string());
+      ok = false;
     }
     if (const Json* p = s.find("pattern"); p && p->is_string()) {
       bool parsed = true;

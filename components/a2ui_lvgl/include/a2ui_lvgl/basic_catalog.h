@@ -14,7 +14,7 @@
 //   - Image pixels come from SurfaceConfig::services.image_loader; without
 //     one, a placeholder box sized by the variant is shown.
 //   - Icon maps names onto LV_SYMBOL_* glyphs of the built-in fonts, with a
-//     text fallback; `svgPath` icons draw the fallback glyph.
+//     text fallback; `svgPath` icons are filled into an alpha mask.
 //   - Text renders a Markdown subset (markdown.h).
 
 #pragma once

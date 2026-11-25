@@ -69,6 +69,22 @@ TEST(schema_numbers_and_strings) {
   EXPECT_TRUE(valid(R"({"pattern":"^#[0-9a-fA-F]{6}$"})", R"("#1a2B3c")"));
   EXPECT_TRUE(!valid(R"({"pattern":"^#[0-9a-fA-F]{6}$"})", R"("not-a-color")"));
   EXPECT_TRUE(valid(R"({"format":"uri"})", R"("not checked")"));
+  // date, time and date-time assert (the catalog's DateTimeInput min/max tell them apart with oneOf).
+  EXPECT_TRUE(valid(R"({"format":"date"})", R"("2024-02-29")"));
+  EXPECT_TRUE(!valid(R"({"format":"date"})", R"("2025-02-29")"));
+  EXPECT_TRUE(!valid(R"({"format":"date"})", R"("09:00")"));
+  EXPECT_TRUE(valid(R"({"format":"time"})", R"("09:00")"));
+  EXPECT_TRUE(valid(R"({"format":"time"})", R"("23:59:59.5+02:00")"));
+  EXPECT_TRUE(!valid(R"({"format":"time"})", R"("24:00")"));
+  EXPECT_TRUE(valid(R"({"format":"date-time"})", R"("2026-03-10T08:30:00Z")"));
+  EXPECT_TRUE(valid(R"({"format":"date-time"})", R"("2026-03-10T08:30")"));
+  EXPECT_TRUE(!valid(R"({"format":"date-time"})", R"("2026-03-10")"));
+  EXPECT_TRUE(valid(R"({"format":"date"})", "3"));  // Only strings are checked.
+  const char* one_of = R"({"oneOf":[{"format":"date"},{"format":"time"},{"format":"date-time"}]})";
+  EXPECT_TRUE(valid(one_of, R"("2026-03-10")"));
+  EXPECT_TRUE(valid(one_of, R"("09:00")"));
+  EXPECT_TRUE(valid(one_of, R"("2026-03-10T09:00:00")"));
+  EXPECT_TRUE(!valid(one_of, R"("tomorrow")"));
 }
 
 TEST(schema_objects) {

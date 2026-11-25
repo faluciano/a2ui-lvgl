@@ -1,0 +1,36 @@
+{
+  "name": "SVG icons",
+  "description": "Adapter render fixture: Icon svgPath names drawn on the 24 x 24 view box, beside symbol icons.",
+  "messages": [
+    {
+      "version": "1.0",
+      "createSurface": {
+        "surfaceId": "svg-icons",
+        "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+      }
+    },
+    {
+      "version": "1.0",
+      "updateComponents": {
+        "surfaceId": "svg-icons",
+        "components": [
+          {"id": "root", "component": "Column", "children": ["r1", "r2", "b1"]},
+          {"id": "r1", "component": "Row", "align": "center", "children": ["heart", "ring", "star", "arrow", "home", "l1"]},
+          {"id": "heart", "component": "Icon", "name": {"svgPath": "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"}},
+          {"id": "ring", "component": "Icon", "name": {"svgPath": "M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20zm0 4a6 6 0 1 1 0 12A6 6 0 0 1 12 6z"}},
+          {"id": "star", "component": "Icon", "name": {"svgPath": "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"}},
+          {"id": "arrow", "component": "Icon", "name": {"svgPath": "M4 11h12.17l-5.59-5.59L12 4l8 8-8 8-1.41-1.41L16.17 13H4z"}},
+          {"id": "home", "component": "Icon", "name": "home"},
+          {"id": "l1", "component": "Text", "text": "svgPath and symbol icons"},
+          {"id": "r2", "component": "Row", "align": "center", "children": ["q", "l2"]},
+          {"id": "q", "component": "Icon", "name": {"svgPath": "M3 12Q3 3 12 3T21 12T12 21T3 12zM7 11v2h10v-2z"}},
+          {"id": "l2", "component": "Text", "text": "Quadratic curves (Q, T) with a cut-out (nonzero rule)", "variant": "caption"},
+          {"id": "b1", "component": "Button", "variant": "primary", "child": "br", "action": {"event": {"name": "like"}}},
+          {"id": "br", "component": "Row", "align": "center", "children": ["bi", "bt"]},
+          {"id": "bi", "component": "Icon", "name": {"svgPath": "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"}},
+          {"id": "bt", "component": "Text", "text": "Like"}
+        ]
+      }
+    }
+  ]
+}
