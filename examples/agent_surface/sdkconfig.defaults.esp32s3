@@ -1,0 +1,12 @@
+# ESP32-S3: octal or quad PSRAM is common on display boards; probe at boot and
+# let malloc (and so LVGL) use it for large blocks.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
+CONFIG_SPIRAM_USE_MALLOC=y
+# Prefer PSRAM for every malloc: the catalog and the surfaces would otherwise
+# fill the internal RAM that Wi-Fi needs (docs/porting.md, "Internal RAM and
+# PSRAM"). Drivers that need internal RAM ask for it and keep this reserve.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=49152
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y

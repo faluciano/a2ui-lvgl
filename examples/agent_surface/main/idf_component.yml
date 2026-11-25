@@ -1,0 +1,17 @@
+dependencies:
+  idf: ">=5.4"
+  lvgl/lvgl: "~9.6.0"
+  espressif/esp_lvgl_port: "^2.9.0"
+  faluciano/a2ui_lvgl:
+    version: "*"
+    override_path: ../../../components/a2ui_lvgl
+  espressif/esp_lcd_ili9341:
+    version: "^2.1.0"
+    rules:
+      - if: "$CONFIG{A2UI_EXAMPLE_NEEDS_ILI9341_DRIVER} == 1"
+  # The ESP32-P4 has no radio of its own: Wi-Fi goes through a companion chip
+  # (an ESP32-C6 on the ESP32-P4-Function-EV-Board) with esp_hosted.
+  espressif/esp_wifi_remote:
+    version: ">=0.10,<2.0"
+    rules:
+      - if: "target in [esp32p4]"

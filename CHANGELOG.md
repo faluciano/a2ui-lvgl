@@ -47,6 +47,21 @@ Tracks upstream A2UI at c26be2dd (was 58379ad4).
   `--size` and `--dark` like `render_sample`, plus `--exit-after`, `--click`,
   `--type` and `--screenshot` for scripted runs without a display
   (`SDL_VIDEODRIVER=dummy`). It needs SDL2; `make` and `make test` do not.
+- `examples/agent_surface`: joins Wi-Fi (through `esp_wifi_remote` on the
+  ESP32-P4), connects to an agent over a WebSocket and draws its surface.
+  Built for the ESP32-S3 and ESP32-P4; not yet run on a board.
+- `a2ui_transport_ws`, the example's WebSocket transport component, on
+  `esp_websocket_client`. It queues what arrives for the LVGL task, sends the
+  user's actions back with the data model when a surface asks for it, and
+  reconnects. Each connection is a new session: the old surfaces are deleted
+  and their data model is offered to the agent. It lives in the example, not
+  in `components/`, and is not on the ESP Component Registry. See
+  [docs/transport.md](docs/transport.md).
+- `examples/agent_surface/sample_agent.py`: a WebSocket agent in Python, run
+  with `uv run`. It sends the upstream coffee-order example and answers "Add to
+  cart" and "Purchase" with data model updates.
+- `make e2e`: a host build of the transport's session code connects to the
+  sample agent, renders, presses buttons, reconnects, and checks each step.
 
 ## 0.1.0
 

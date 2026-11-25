@@ -1,0 +1,12 @@
+# Part of the agent_surface example. ESP-IDF picks up the project's
+# components/ directory by itself; to use this component in another project,
+# copy the directory or add it as a git dependency (docs/transport.md).
+version: "0.1.0"
+description: WebSocket transport for a2ui_core on ESP-IDF - connects to an A2UI v1.0 agent, hands its messages to the UI task and sends the user's actions back.
+license: Apache-2.0
+dependencies:
+  idf: ">=5.4"
+  espressif/esp_websocket_client: "^1.8.0"
+  faluciano/a2ui_core:
+    version: "0.1.0"
+    override_path: ../../../../components/a2ui_core

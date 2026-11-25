@@ -1,0 +1,139 @@
+menu "A2UI agent surface example"
+
+    config A2UI_EXAMPLE_WIFI_SSID
+        string "Wi-Fi network name (SSID)"
+        default "myssid"
+
+    config A2UI_EXAMPLE_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default "mypassword"
+        help
+            Leave empty for an open network.
+
+    config A2UI_EXAMPLE_AGENT_URI
+        string "Agent WebSocket URI"
+        default "ws://192.168.1.2:8765"
+        help
+            Where the agent listens: ws://host:port/path, or wss:// for TLS.
+            sample_agent.py prints the address to use when it starts.
+
+    config A2UI_EXAMPLE_RECONNECT_MS
+        int "Reconnect delay (ms)"
+        range 500 600000
+        default 5000
+        help
+            How long to wait before connecting again after the connection
+            to the agent fails or closes.
+
+    config A2UI_EXAMPLE_MAX_MESSAGE_KB
+        int "Largest message from the agent (KB)"
+        range 4 1024
+        default 64
+        help
+            A larger frame is dropped and the connection is restarted, so
+            the agent sends its surfaces again.
+
+    choice A2UI_EXAMPLE_DISPLAY
+        prompt "Display"
+        default A2UI_EXAMPLE_DISPLAY_SPI
+        help
+            Where LVGL draws. "Headless" renders into a RAM buffer and drops
+            the pixels, so the example runs on any board.
+
+        config A2UI_EXAMPLE_DISPLAY_SPI
+            bool "SPI LCD panel (esp_lcd)"
+        config A2UI_EXAMPLE_DISPLAY_HEADLESS
+            bool "Headless (dummy flush, no panel)"
+    endchoice
+
+    config A2UI_EXAMPLE_HRES
+        int "Horizontal resolution"
+        default 240
+    config A2UI_EXAMPLE_VRES
+        int "Vertical resolution"
+        default 320
+
+    if A2UI_EXAMPLE_DISPLAY_SPI
+
+        choice A2UI_EXAMPLE_LCD_CONTROLLER
+            prompt "LCD controller"
+            default A2UI_EXAMPLE_LCD_ST7789
+            config A2UI_EXAMPLE_LCD_ST7789
+                bool "ST7789"
+            config A2UI_EXAMPLE_LCD_ILI9341
+                bool "ILI9341"
+        endchoice
+
+        config A2UI_EXAMPLE_LCD_PIXEL_CLOCK_MHZ
+            int "SPI pixel clock (MHz)"
+            range 1 80
+            default 40
+
+        config A2UI_EXAMPLE_LCD_INVERT_COLORS
+            bool "Invert colors"
+            default y if A2UI_EXAMPLE_LCD_ST7789
+            default n
+
+        config A2UI_EXAMPLE_LCD_BGR
+            bool "Panel uses BGR element order"
+            default y if A2UI_EXAMPLE_LCD_ILI9341
+            default n
+
+        config A2UI_EXAMPLE_PIN_SCLK
+            int "SCLK GPIO"
+            default 6 if IDF_TARGET_ESP32C3
+            default 12 if IDF_TARGET_ESP32S3
+            default 20 if IDF_TARGET_ESP32P4
+            default 18
+
+        config A2UI_EXAMPLE_PIN_MOSI
+            int "MOSI GPIO"
+            default 7 if IDF_TARGET_ESP32C3
+            default 11 if IDF_TARGET_ESP32S3
+            default 21 if IDF_TARGET_ESP32P4
+            default 23
+
+        config A2UI_EXAMPLE_PIN_CS
+            int "CS GPIO"
+            default 10 if IDF_TARGET_ESP32C3
+            default 10 if IDF_TARGET_ESP32S3
+            default 22 if IDF_TARGET_ESP32P4
+            default 5
+
+        config A2UI_EXAMPLE_PIN_DC
+            int "DC GPIO"
+            default 3 if IDF_TARGET_ESP32C3
+            default 9 if IDF_TARGET_ESP32S3
+            default 23 if IDF_TARGET_ESP32P4
+            default 16
+
+        config A2UI_EXAMPLE_PIN_RST
+            int "RESET GPIO (-1 if not connected)"
+            default 1 if IDF_TARGET_ESP32C3
+            default 8 if IDF_TARGET_ESP32S3
+            default 32 if IDF_TARGET_ESP32P4
+            default 17
+
+        config A2UI_EXAMPLE_PIN_BL
+            int "Backlight GPIO (-1 if not connected)"
+            default 0 if IDF_TARGET_ESP32C3
+            default 7 if IDF_TARGET_ESP32S3
+            default 33 if IDF_TARGET_ESP32P4
+            default 4
+
+        config A2UI_EXAMPLE_BL_ON_LEVEL
+            int "Backlight on level"
+            range 0 1
+            default 1
+
+    endif
+
+    # Always defined (unlike the choice above), so main/idf_component.yml can
+    # use it to decide whether to fetch the ILI9341 driver.
+    # (A promptless bool that is n is left out of sdkconfig.json; an int is not.)
+    config A2UI_EXAMPLE_NEEDS_ILI9341_DRIVER
+        int
+        default 1 if A2UI_EXAMPLE_DISPLAY_SPI && A2UI_EXAMPLE_LCD_ILI9341
+        default 0
+
+endmenu
