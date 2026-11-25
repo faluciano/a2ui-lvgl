@@ -29,7 +29,7 @@ been tried yet; please
 |---|---|
 | A2UI core conformance (v1.0 cases) | 672 pass, 0 fail, 1 documented exception |
 | A2UI framework adapter conformance | 36 of 36 |
-| Unit tests | 99, plus 107 LVGL adapter checks |
+| Unit tests | 99, plus 165 LVGL adapter checks |
 | ESP-IDF v6.0 builds | ESP32, ESP32-S3, ESP32-C3, ESP32-P4, no warnings |
 
 Details, including what is skipped and why, are in
@@ -194,8 +194,9 @@ the libraries in PSRAM and how much stack to give the A2UI task.
 - `Video` and `AudioPlayer` render nothing. Register your own component to
   show a poster or a player.
 - `Image` shows a placeholder until your image loader delivers pixels.
-- The built-in fonts have no bold or italic, and no emoji.
-- Long text inside a `Row` does not wrap (LVGL flex items do not shrink).
+- The built-in fonts have no bold or italic, and no emoji. Bold and italic
+  work once you add the fonts; see
+  [docs/adapter.md](docs/adapter.md#bold-and-italic).
 - A regular expression with an unanchored lookahead, such as `(?=.*x)`, takes
   time proportional to the square of the input length (inputs are capped at
   4,096 characters).

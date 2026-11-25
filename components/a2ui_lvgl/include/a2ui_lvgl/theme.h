@@ -64,6 +64,9 @@ struct Theme {
   /** Height of a vertical divider whose container gives it none. */
   int32_t divider_min_length = 24;
 
+  /** Box of an Icon with an `svgPath` name; the path's 24 x 24 view box is scaled to it. */
+  int32_t icon_size = 24;
+
   /** Image box sizes per variant (basic catalog guide). */
   int32_t image_icon = 24;
   int32_t image_avatar = 40;

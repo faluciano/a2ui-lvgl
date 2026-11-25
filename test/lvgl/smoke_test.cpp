@@ -5,7 +5,8 @@
 // display backed by a memory buffer: plain LVGL widgets, then the adapter's
 // lifecycle and edge cases that the conformance suites do not reach
 // (object deletion from outside, deletion inside an event handler, real
-// pointer input, fallbacks, registry overrides, Markdown, ISO 8601).
+// pointer input, fallbacks, registry overrides, Markdown, ISO 8601, text
+// wrapping in rows, svgPath icons, DateTimeInput ranges).
 
 #include <cstdint>
 #include <cstdio>
@@ -21,6 +22,7 @@
 #include "a2ui/spec_documents.h"
 #include "a2ui_lvgl/a2ui_lvgl.h"
 #include "catalog/basic/iso8601.h"
+#include "catalog/basic/svg_path.h"
 #include "lvgl.h"
 #include "lvgl_env.h"
 
@@ -493,6 +495,190 @@ void test_iso8601() {
   CHECK(a2ui_lvgl::basic::parse_iso8601("2025-01-01T08:00:00.250Z", &v) && v.fraction == "250" && v.zone == "Z");
 }
 
+
+// --- Row text wrapping, svgPath icons, DateTimeInput range -----------------------------
+
+int32_t right_edge(lv_obj_t* o) {
+  lv_area_t a;
+  lv_obj_get_coords(o, &a);
+  return a.x2 + lv_obj_get_style_margin_right(o, LV_PART_MAIN);
+}
+
+void test_row_text_wraps() {
+  Fixture f;
+  f.send(kCreate);
+  f.send(update(R"([{"id":"root","component":"Column","children":["r1","r2","r3"]},
+    {"id":"r1","component":"Row","children":["i1","t1"]},
+    {"id":"i1","component":"Icon","name":"mail"},
+    {"id":"t1","component":"Text","text":"A long line of text that cannot fit beside the icon on a narrow screen and has to wrap"},
+    {"id":"r2","component":"Row","children":["t2","t3"]},
+    {"id":"t2","component":"Text","text":"First column of text that is long enough to need two lines here"},
+    {"id":"t3","component":"Text","text":"Second, shorter text"},
+    {"id":"r3","component":"Row","justify":"spaceBetween","children":["t4","t5"]},
+    {"id":"t4","component":"Text","text":"Left"},{"id":"t5","component":"Text","text":"Right"}])").c_str());
+  lv_obj_t* r1 = f.obj("r1");
+  lv_obj_t* t1 = f.obj("t1");
+  const int32_t line = lv_font_get_line_height(lv_obj_get_style_text_font(t1, LV_PART_MAIN));
+  // The text fits beside the icon and wraps instead of overflowing.
+  CHECK(right_edge(t1) <= right_edge(r1));
+  CHECK(lv_obj_get_x(t1) > lv_obj_get_x(f.obj("i1")));
+  CHECK(lv_obj_get_height(t1) >= 2 * line);
+  CHECK(lv_obj_get_height(r1) >= lv_obj_get_height(t1));
+  // Two texts share the overflow in proportion to their length; both fit.
+  lv_obj_t* t2 = f.obj("t2");
+  lv_obj_t* t3 = f.obj("t3");
+  CHECK(right_edge(t3) <= right_edge(f.obj("r2")));
+  CHECK(lv_obj_get_width(t2) > lv_obj_get_width(t3));
+  CHECK(lv_obj_get_height(t2) >= 2 * line);
+  // Short texts keep their natural width (justify still has free space to place).
+  CHECK(lv_obj_get_height(f.obj("t4")) < 2 * line);
+  CHECK(lv_obj_get_style_max_width(f.obj("t4"), LV_PART_MAIN) == lv_pct(100));
+  CHECK(right_edge(f.obj("t5")) == right_edge(f.obj("r3")));
+  // Shorter text later: the cap is lifted again.
+  f.send(update(R"([{"id":"t1","component":"Text","text":"Short"}])").c_str());
+  CHECK(lv_obj_get_style_max_width(t1, LV_PART_MAIN) == lv_pct(100));
+  CHECK(lv_obj_get_height(t1) < 2 * line);
+}
+
+void test_svg_path_icon() {
+  using a2ui_lvgl::basic::render_svg_path;
+  std::vector<uint8_t> m;
+  // A square, a ring (nonzero: the inner circle runs the other way) and every command.
+  CHECK(render_svg_path("M4 4h16v16H4z", 24, &m) && m.size() == 24 * 24);
+  CHECK(m[12 * 24 + 12] == 255 && m[2 * 24 + 2] == 0 && m[4 * 24 + 4] == 255);
+  CHECK(render_svg_path("M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20zm0 4a6 6 0 1 1 0 12A6 6 0 0 1 12 6z", 48, &m));
+  CHECK(m[24 * 48 + 24] == 0 && m[24 * 48 + 6] == 255 && m[0] == 0);
+  CHECK(render_svg_path("M2,2L22,2 22,22C15 22 9 22 2 22S2 10 2 2zm1 1q4 0 4 4t4 4", 24, &m));
+  CHECK(render_svg_path("M1-1.5.5.5e1l10 10V20H1z", 24, &m));  // Packed numbers.
+  CHECK(!render_svg_path("", 24, &m) && m.empty());
+  CHECK(!render_svg_path("L10 10 20 20", 24, &m));  // Must start with a moveto.
+  CHECK(!render_svg_path("M5 5", 24, &m));          // Nothing to fill.
+  // Drawn up to the first error.
+  CHECK(render_svg_path("M4 4h16v16H4z M x", 24, &m) && m[12 * 24 + 12] == 255);
+
+  Fixture f;
+  f.send(kCreate);
+  f.send(R"({"version":"1.0","updateDataModel":{"surfaceId":"s","path":"/p","value":"M4 4h16v16H4z"}})");
+  f.send(update(R"([{"id":"root","component":"Row","children":["a","b","c"]},
+    {"id":"a","component":"Icon","name":{"svgPath":"M12 2L22 22H2z"}},
+    {"id":"b","component":"Icon","name":{"svgPath":{"@path":"/p"}}},
+    {"id":"c","component":"Icon","name":"home"}])").c_str());
+  lv_obj_t* a = f.obj("a");
+  CHECK(a != nullptr && !lv_obj_check_type(a, &lv_label_class));
+  CHECK(lv_obj_get_width(a) == 24 && lv_obj_get_height(a) == 24);
+  CHECK(f.find("a")->describe()["name"]["svgPath"].as_string() == "M12 2L22 22H2z");
+  CHECK(f.find("b")->describe()["name"]["svgPath"].as_string() == "M4 4h16v16H4z");
+  CHECK(label_text_is(f.obj("c"), LV_SYMBOL_HOME));
+  f.send(R"({"version":"1.0","updateDataModel":{"surfaceId":"s","path":"/p","value":"M2 2h4v4H2z"}})");
+  CHECK(f.find("b")->describe()["name"]["svgPath"].as_string() == "M2 2h4v4H2z");
+  // A name switch swaps the object kind both ways; invalid data shows the fallback glyph.
+  f.send(update(R"([{"id":"a","component":"Icon","name":"home"},
+    {"id":"c","component":"Icon","name":{"svgPath":"nonsense"}}])").c_str());
+  CHECK(label_text_is(f.obj("a"), LV_SYMBOL_HOME));
+  CHECK(label_text_is(f.obj("c"), LV_SYMBOL_BULLET));
+  CHECK(lv_obj_get_child_count(f.obj("root")) == 3);
+}
+
+lv_obj_t* find_in(lv_obj_t* parent, const lv_obj_class_t* cls) {
+  for (uint32_t i = 0; i < lv_obj_get_child_count(parent); ++i) {
+    lv_obj_t* c = lv_obj_get_child(parent, static_cast<int32_t>(i));
+    if (lv_obj_check_type(c, cls)) return c;
+    if (lv_obj_t* found = find_in(c, cls)) return found;
+  }
+  return nullptr;
+}
+
+/** Button index of `day` in lv_calendar's matrix for March 2026 (1 March 2026 is a Sunday). */
+uint32_t march_2026_button(int day) { return static_cast<uint32_t>(7 + day - 1); }
+
+void test_date_time_range() {
+  Fixture f;
+  f.send(kCreate);
+  f.send(R"({"version":"1.0","updateDataModel":{"surfaceId":"s","path":"/max","value":"2026-03-20"}})");
+  a2ui::Status st = f.send(update(R"([{"id":"root","component":"Column","children":["d","t","dt"]},
+    {"id":"d","component":"DateTimeInput","enableDate":true,"value":{"@path":"/d"},
+     "min":"2026-03-10","max":{"@path":"/max"}},
+    {"id":"t","component":"DateTimeInput","enableTime":true,"value":{"@path":"/t"},"min":"09:00","max":"17:30"},
+    {"id":"dt","component":"DateTimeInput","enableDate":true,"enableTime":true,"value":{"@path":"/dt"},
+     "min":"2026-03-10T08:30:00"}])").c_str());
+  CHECK(st.ok());  // Literal min/max need the date/time formats to assert (schema.cpp).
+  auto data = [&](const char* path) {
+    auto r = f.processor->model().get_surface("s")->data_model().get(path);
+    return r.ok() && r.value() && r.value()->is_string() ? r.value()->as_string() : std::string();
+  };
+  // Values picked outside the range are clamped to it.
+  CHECK(f.find("d")->simulate_input(Json("2026-03-25")));
+  CHECK(data("/d") == "2026-03-20");
+  CHECK(f.find("d")->simulate_input(Json("2026-03-01")));
+  CHECK(data("/d") == "2026-03-10");
+  CHECK(f.find("d")->simulate_input(Json("2026-03-15")));
+  CHECK(data("/d") == "2026-03-15");
+  CHECK(f.find("t")->simulate_input(Json("20:15")));
+  CHECK(data("/t") == "17:30:00");
+  CHECK(f.find("t")->simulate_input(Json("06:00")));
+  CHECK(data("/t") == "09:00:00");
+  // On the first allowed day the time cannot be before the minimum.
+  CHECK(f.find("dt")->simulate_input(Json("2026-03-10T07:00:00")));
+  CHECK(data("/dt") == "2026-03-10T08:30:00");
+  CHECK(f.find("dt")->simulate_input(Json("2026-03-11T07:00:00")));
+  CHECK(data("/dt") == "2026-03-11T07:00:00");
+
+  // The open picker disables days outside the range and the arrows past it.
+  lv_obj_t* field = lv_obj_get_child(f.obj("d"), 1);
+  lv_obj_send_event(field, LV_EVENT_CLICKED, nullptr);
+  lvgl_env::run(1);
+  lv_obj_t* cal = find_in(lv_layer_top(), &lv_calendar_class);
+  CHECK(cal != nullptr);
+  if (cal) {
+    lv_obj_t* days = lv_calendar_get_btnmatrix(cal);
+    CHECK(lv_buttonmatrix_has_button_ctrl(days, march_2026_button(9), LV_BUTTONMATRIX_CTRL_DISABLED));
+    CHECK(!lv_buttonmatrix_has_button_ctrl(days, march_2026_button(10), LV_BUTTONMATRIX_CTRL_DISABLED));
+    CHECK(!lv_buttonmatrix_has_button_ctrl(days, march_2026_button(20), LV_BUTTONMATRIX_CTRL_DISABLED));
+    CHECK(lv_buttonmatrix_has_button_ctrl(days, march_2026_button(21), LV_BUTTONMATRIX_CTRL_DISABLED));
+#if LV_USE_CALENDAR_HEADER_ARROW
+    lv_obj_t* header = find_in(cal, &lv_calendar_header_arrow_class);
+    CHECK(header && lv_obj_has_state(lv_obj_get_child(header, 0), LV_STATE_DISABLED));
+    CHECK(header && lv_obj_has_state(lv_obj_get_child(header, 2), LV_STATE_DISABLED));
+#endif
+  }
+  // The time rollers snap back into range.
+  lv_obj_send_event(lv_obj_get_child(f.obj("t"), 1), LV_EVENT_CLICKED, nullptr);
+  lv_obj_t* hours = find_in(lv_layer_top(), &lv_roller_class);
+  CHECK(hours != nullptr);
+  if (hours) {
+    lv_roller_set_selected(hours, 22, LV_ANIM_OFF);
+    lv_obj_send_event(hours, LV_EVENT_VALUE_CHANGED, nullptr);
+    CHECK(lv_roller_get_selected(hours) == 17);
+  }
+}
+
+
+void test_theme_emphasis_fonts() {
+  // Bold and italic runs use the theme's fonts when it has them (docs/adapter.md, "Bold and italic").
+  a2ui_lvgl::Theme theme = a2ui_lvgl::Theme::light();
+  theme.bold = &lv_font_montserrat_20;
+  theme.italic = &lv_font_montserrat_16;
+  a2ui_lvgl::SurfaceConfig cfg;
+  cfg.theme = &theme;
+  Fixture f(std::move(cfg));
+  f.send(kCreate);
+  f.send(update(R"([{"id":"root","component":"Text","text":"plain **bold** *italic*"}])").c_str());
+  lv_obj_t* spans = f.obj("root");
+  CHECK(spans && lv_obj_check_type(spans, &lv_spangroup_class));
+  if (!spans) return;
+  const lv_font_t* bold = nullptr;
+  const lv_font_t* italic = nullptr;
+  for (uint32_t i = 0; i < lv_spangroup_get_span_count(spans); ++i) {
+    lv_span_t* span = lv_spangroup_get_child(spans, static_cast<int32_t>(i));
+    lv_style_value_t v;
+    if (lv_style_get_prop(lv_span_get_style(span), LV_STYLE_TEXT_FONT, &v) != LV_STYLE_RES_FOUND) continue;
+    if (std::strcmp(lv_span_get_text(span), "bold") == 0) bold = static_cast<const lv_font_t*>(v.ptr);
+    if (std::strcmp(lv_span_get_text(span), "italic") == 0) italic = static_cast<const lv_font_t*>(v.ptr);
+  }
+  CHECK(bold == &lv_font_montserrat_20);
+  CHECK(italic == &lv_font_montserrat_16);
+}
+
 }  // namespace
 
 int main() {
@@ -512,6 +698,10 @@ int main() {
     test_image_loader_focus_and_validity();
     test_markdown_parser();
     test_iso8601();
+    test_row_text_wraps();
+    test_svg_path_icon();
+    test_date_time_range();
+    test_theme_emphasis_fonts();
     lvgl_env::run(2);
     CHECK(lv_obj_get_child_count(lv_screen_active()) == 0);
     lv_display_delete(disp.display);

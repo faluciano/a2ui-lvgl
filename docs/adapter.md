@@ -98,6 +98,38 @@ has no protocol theme). Leaf components and outlined containers carry a
 uniform margin, Row/Column/List none; text colour reaches `Text` and `Icon`
 through LVGL style inheritance; cards are outlined and transparent.
 
+### Bold and italic
+
+The built-in Montserrat fonts have one weight and no italic, so by default
+`**bold**` and `*italic*` runs show in the body font. Give the theme the
+faces and the runs use them; `Theme::code` works the same way for code.
+
+Convert the faces you need with
+[lv_font_conv](https://github.com/lvgl/lv_font_conv), at the body size and
+only for the characters you show:
+
+```sh
+npx lv_font_conv --font Montserrat-Bold.ttf --size 14 --bpp 4 \
+  --range 0x20-0x7E --format lvgl --lv-include lvgl.h \
+  -o lv_font_montserrat_bold_14.c
+```
+
+Add the `.c` files to your app and set the fonts:
+
+```cpp
+LV_FONT_DECLARE(lv_font_montserrat_bold_14);
+LV_FONT_DECLARE(lv_font_montserrat_italic_14);
+
+a2ui_lvgl::Theme theme = a2ui_lvgl::Theme::light();
+theme.bold = &lv_font_montserrat_bold_14;
+theme.italic = &lv_font_montserrat_italic_14;
+config.theme = &theme;  // SurfaceConfig; the surface copies the theme.
+```
+
+Each face costs flash only in apps that link it; the adapter ships none.
+With `LV_USE_TINY_TTF`, `lv_tiny_ttf_create_data()` can instead render a
+`.ttf` kept in flash at any size, at the cost of a glyph cache in RAM.
+
 ## Host hooks
 
 Host hooks (`SurfaceConfig::services`): an `ImageLoader` for `Image`
@@ -118,12 +150,25 @@ accessibility API.
   quotes, links as text, images as alt text, raw HTML as text). Bold, italic
   and code runs need the theme to provide those fonts; the built-in
   Montserrat fonts have none, so the markers are stripped and the run uses
-  the body font. Glyphs outside the fonts' ranges (emoji, stars) show as
+  the body font ([Bold and italic](#bold-and-italic) shows how to add
+  them). Glyphs outside the fonts' ranges (emoji, stars) show as
   boxes.
-- `Icon` maps names to `LV_SYMBOL_*` glyphs with ASCII stand-ins; `svgPath`
-  icons draw a bullet.
+- `Icon` maps names to `LV_SYMBOL_*` glyphs with ASCII stand-ins. An
+  `svgPath` icon is filled (nonzero rule, antialiased) from its 24 x 24 view
+  box into a `Theme::icon_size` alpha mask (576 bytes at 24 px) and tinted
+  with the text colour. Path data is drawn up to its first error; data with
+  nothing to draw shows a bullet. Strokes and other SVG elements are not
+  supported (the catalog has only path data).
 - `DateTimeInput` uses `lv_calendar` and hour/minute rollers; ISO 8601
-  zone designators are kept verbatim, never converted; `min`/`max` are not
-  enforced by the picker.
-- A Row cannot shrink its children (LVGL flex has no shrink), so long text
-  in a Row does not wrap; in a Column it does.
+  zone designators are kept verbatim, never converted. `min` and `max`
+  limit the picker: days outside the range are disabled, the month arrows
+  stop at it, the rollers snap back into it and OK writes a value inside it.
+  A bound limits only the parts the picker shows (a date bound the date, a
+  time bound the time of day). Values set by the agent are not clamped; use
+  checks to validate them.
+- LVGL flex items cannot shrink, so a Row narrows its `Text` children
+  itself after each layout pass: when the children overflow, each plain
+  text gives up width in proportion to its natural width, down to its
+  longest word, and wraps. Other children (buttons, images, nested rows
+  sized to their content) keep their width, and Markdown text with several
+  blocks or fonts shares the free space with the other full-width children.

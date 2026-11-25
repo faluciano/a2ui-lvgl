@@ -22,6 +22,24 @@ Tracks upstream A2UI at c26be2dd (was 58379ad4).
   back as an object instead of `false` (upstream #4251).
 - The conformance harness supports `addCatalogPaths` steps and finds the
   v0.9.1 fixtures at their new upstream location.
+- Long `Text` in a `Row` wraps. LVGL flex items cannot shrink, so after each
+  layout pass a Row narrows its text children when they overflow, in
+  proportion to their natural width and never below their longest word.
+- `Icon` draws `svgPath` names: the path (M, L, H, V, C, S, Q, T, A, Z) is
+  filled into an antialiased alpha mask on the 24 x 24 view box and tinted
+  with the text colour. No LVGL vector backend is needed. New
+  `Theme::icon_size` (default 24).
+- `DateTimeInput` enforces `min` and `max` in the picker: out-of-range days
+  are disabled, the month arrows stop at the range, the time rollers snap
+  back into it, and OK writes a value inside it.
+- `a2ui_core`: the JSON Schema `format`s `date`, `time` and `date-time`
+  now assert, as ISO 8601 dates, times of day and the two joined by `T`.
+  The basic catalog tells `DateTimeInput` `min`/`max` values apart with a
+  `oneOf` of these formats; as annotations all three matched, so every
+  component with a literal `min` or `max` was rejected as "matches more than
+  one schema". Other formats are still not checked.
+- docs/adapter.md shows how to add bold and italic fonts to the theme.
+- `make renders` also renders the adapter fixtures in `test/lvgl/renders`.
 
 ## 0.1.0
 

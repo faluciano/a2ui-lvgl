@@ -5,7 +5,7 @@
 #   make conformance SUITE=data_model   run one suite (substring match)
 #   make lvgl-smoke  build LVGL (third_party/lvgl) and run the LVGL adapter tests
 #   make adapter-conformance   run the framework adapter suites against a2ui_lvgl
-#   make renders     render catalogs/basic/v1/examples to build/renders/*.png
+#   make renders     render catalogs/basic/v1/examples and test/lvgl/renders to build/renders/*.png
 #
 # The LVGL targets are part of `all` and `test` when the third_party/lvgl
 # submodule is checked out; the core library and harness never depend on it.
@@ -62,6 +62,8 @@ RENDER_OBJS := $(BUILD)/tools/render_sample/render_sample.o $(BUILD)/tools/rende
 ADAPTER_SUITES := build/conformance/core/adapter_conformance.json build/conformance/core/accessibility.json \
 	build/conformance/adapter/markdown_subset.json
 EXAMPLES := $(wildcard $(UPSTREAM)/catalogs/basic/v1/examples/*.json)
+# Adapter fixtures (test/lvgl/renders) for layouts the examples do not cover.
+EXAMPLES += $(wildcard test/lvgl/renders/*.json)
 
 $(ADAPTER_OBJS): LIB_CXXFLAGS += -Icomponents/a2ui_lvgl/include $(LVGL_INC)
 $(BUILD)/test/lvgl/%.o: TEST_CXXFLAGS += -Icomponents/a2ui_lvgl/include -Icomponents/a2ui_lvgl/src $(LVGL_INC)
@@ -143,7 +145,7 @@ adapter-conformance: $(BUILD)/adapter_conformance $(ADAPTER_SUITES)
 	$(BUILD)/adapter_conformance --repo-root $(UPSTREAM) $(foreach f,$(ADAPTER_SUITES),--suite-file $(f)) \
 		$(if $(CASE),--case $(CASE)) $(if $(VERBOSE),--verbose)
 
-# One PNG per basic catalog example (480x800), for humans to look at.
+# One PNG per basic catalog example and adapter fixture (480x800), for humans to look at.
 renders: $(BUILD)/render_sample
 	@mkdir -p build/renders
 	@for f in $(EXAMPLES); do \

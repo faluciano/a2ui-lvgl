@@ -4,8 +4,9 @@
 // DateTimeInput: a field showing the value; tapping it opens a picker on the
 // top layer (lv_calendar for the date, hour/minute rollers for the time)
 // with Cancel / OK. OK writes an ISO 8601 string (iso8601.h) through the
-// value binding. min/max are not enforced by the picker (lv_calendar has no
-// range); checks on the component still validate the value.
+// value binding. `min` and `max` bound the picker: calendar days outside
+// them are disabled, the month arrows stop at the range, and the time rollers
+// snap back into range; checks on the component still validate the value.
 
 #include "iso8601.h"
 
@@ -173,6 +174,71 @@ namespace {
 
 using a2ui::Json;
 
+int compare_dates(const IsoDateTime& a, const IsoDateTime& b) {
+  if (a.year != b.year) return a.year < b.year ? -1 : 1;
+  if (a.month != b.month) return a.month < b.month ? -1 : 1;
+  if (a.day != b.day) return a.day < b.day ? -1 : 1;
+  return 0;
+}
+
+int compare_times(const IsoDateTime& a, const IsoDateTime& b) {
+  const int x = (a.hour * 60 + a.minute) * 60 + a.second, y = (b.hour * 60 + b.minute) * 60 + b.second;
+  return x < y ? -1 : (x > y ? 1 : 0);
+}
+
+/**
+ * One end of the picker's range. A bound limits the fields it has that the
+ * picker shows: a date bound limits the date, a time bound the time of day,
+ * a date-time bound both, in that order.
+ */
+struct Bound {
+  bool use_date = false;
+  bool use_time = false;
+  IsoDateTime at;
+
+  void set(const std::string& text, bool enable_date, bool enable_time) {
+    use_date = use_time = false;
+    if (text.empty() || !parse_iso8601(text, &at)) return;
+    use_date = enable_date && at.has_date;
+    use_time = enable_time && at.has_time;
+  }
+  bool active() const { return use_date || use_time; }
+
+  /** <0, 0 or >0 as `v` is before, on or after the bound. */
+  int compare(const IsoDateTime& v) const {
+    if (use_date) {
+      const int c = compare_dates(v, at);
+      if (c != 0 || !use_time) return c;
+    }
+    return use_time ? compare_times(v, at) : 0;
+  }
+
+  /** Moves `v` onto the bound (the fields the bound limits). */
+  void apply(IsoDateTime* v) const {
+    if (use_date) {
+      v->year = at.year;
+      v->month = at.month;
+      v->day = at.day;
+    }
+    if (use_time) {
+      v->hour = at.hour;
+      v->minute = at.minute;
+      v->second = at.second;
+    }
+  }
+};
+
+/** Column of the first day of a month in lv_calendar (same formula as lv_calendar.c). */
+int first_weekday(int year, int month) {
+  const int a = month < 3 ? 1 : 0;
+  const int b = year - a;
+#if LV_CALENDAR_WEEK_STARTS_MONDAY
+  return (1 + (31 * (month - 2 + 12 * a) / 12) + b + (b / 4) - (b / 100) + (b / 400) - 1) % 7;
+#else
+  return (1 + (31 * (month - 2 + 12 * a) / 12) + b + (b / 4) - (b / 100) + (b / 400)) % 7;
+#endif
+}
+
 const char* hour_options() {
   static std::string opts;
   if (opts.empty()) {
@@ -237,6 +303,8 @@ class DateTimeInput : public ComponentInstance {
     enable_date_ = view.bool_prop("enableDate", false);
     enable_time_ = view.bool_prop("enableTime", false);
     if (!enable_date_ && !enable_time_) enable_date_ = true;
+    min_.set(view.string_prop("min"), enable_date_, enable_time_);
+    max_.set(view.string_prop("max"), enable_date_, enable_time_);
     value_ = view.string_prop("value");
     parsed_ok_ = parse_iso8601(value_, &parsed_);
     std::string shown;
@@ -293,13 +361,20 @@ class DateTimeInput : public ComponentInstance {
       pick_.month = 1;
       pick_.day = 1;
     }
+    clamp(&pick_);
     lv_obj_t* panel = popup_.open(root_, s, &DateTimeInput::dismiss, this);
-    calendar_ = hour_roller_ = minute_roller_ = nullptr;
+    calendar_ = hour_roller_ = minute_roller_ = prev_month_ = next_month_ = nullptr;
     if (enable_date_) {
       calendar_ = lv_calendar_create(panel);
       lv_obj_set_size(calendar_, lv_pct(100), 230);
 #if LV_USE_CALENDAR_HEADER_ARROW
-      lv_calendar_add_header_arrow(calendar_);
+      lv_obj_t* header = lv_calendar_add_header_arrow(calendar_);
+      // Children: previous button, month label, next button.
+      prev_month_ = lv_obj_get_child(header, 0);
+      next_month_ = lv_obj_get_child(header, 2);
+      // Runs after the header's own handler has changed the month.
+      add_event<DateTimeInput, &DateTimeInput::on_month>(prev_month_, LV_EVENT_CLICKED, this);
+      add_event<DateTimeInput, &DateTimeInput::on_month>(next_month_, LV_EVENT_CLICKED, this);
 #endif
       lv_calendar_set_today_date(calendar_, static_cast<uint32_t>(pick_.year), static_cast<uint32_t>(pick_.month),
                                  static_cast<uint32_t>(pick_.day));
@@ -316,6 +391,7 @@ class DateTimeInput : public ComponentInstance {
       lv_roller_set_options(hour_roller_, hour_options(), LV_ROLLER_MODE_NORMAL);
       lv_roller_set_visible_row_count(hour_roller_, 3);
       lv_roller_set_selected(hour_roller_, static_cast<uint32_t>(pick_.hour), LV_ANIM_OFF);
+      add_event<DateTimeInput, &DateTimeInput::on_roller>(hour_roller_, LV_EVENT_VALUE_CHANGED, this);
       lv_obj_t* colon = lv_label_create(row);
       lv_label_set_text_static(colon, ":");
       lv_obj_set_style_pad_hor(colon, s.theme.leaf_margin, 0);
@@ -323,6 +399,7 @@ class DateTimeInput : public ComponentInstance {
       lv_roller_set_options(minute_roller_, minute_options(), LV_ROLLER_MODE_NORMAL);
       lv_roller_set_visible_row_count(minute_roller_, 3);
       lv_roller_set_selected(minute_roller_, static_cast<uint32_t>(pick_.minute), LV_ANIM_OFF);
+      add_event<DateTimeInput, &DateTimeInput::on_roller>(minute_roller_, LV_EVENT_VALUE_CHANGED, this);
     }
     lv_obj_t* buttons = make_container(panel, s);
     lv_obj_set_width(buttons, lv_pct(100));
@@ -360,26 +437,97 @@ class DateTimeInput : public ComponentInstance {
     highlighted_.day = static_cast<uint8_t>(d);
     lv_calendar_set_month_shown(calendar_, static_cast<uint32_t>(y), static_cast<uint32_t>(m));
     lv_calendar_set_highlighted_dates(calendar_, &highlighted_, 1);
+    apply_range();
   }
 
   void on_calendar(lv_event_t*) {
     lv_calendar_date_t date;
-    if (lv_calendar_get_pressed_date(calendar_, &date) == LV_RESULT_OK) select_date(date.year, date.month, date.day);
+    if (lv_calendar_get_pressed_date(calendar_, &date) != LV_RESULT_OK) return;
+    select_date(date.year, date.month, date.day);
+    // A day at the edge of a date-time range can pull the time into range.
+    if (hour_roller_) {
+      IsoDateTime v = picked();
+      if (clamp(&v)) set_rollers(v);
+    }
   }
 
-  static void dismiss(void* self) { static_cast<DateTimeInput*>(self)->popup_.close(); }
-  void on_cancel(lv_event_t*) { popup_.close(); }
+  void on_month(lv_event_t*) { apply_range(); }
 
-  void on_ok(lv_event_t*) {
+  void on_roller(lv_event_t*) {
+    IsoDateTime v = picked();
+    if (clamp(&v)) set_rollers(v);
+  }
+
+  /** The date and time currently selected in the picker. */
+  IsoDateTime picked() const {
     IsoDateTime v = pick_;
     if (hour_roller_) {
       v.hour = static_cast<int>(lv_roller_get_selected(hour_roller_));
       v.minute = static_cast<int>(lv_roller_get_selected(minute_roller_));
       v.has_time = true;
     }
+    return v;
+  }
+
+  void set_rollers(const IsoDateTime& v) {
+    pick_.second = v.second;
+    lv_roller_set_selected(hour_roller_, static_cast<uint32_t>(v.hour), LV_ANIM_OFF);
+    lv_roller_set_selected(minute_roller_, static_cast<uint32_t>(v.minute), LV_ANIM_OFF);
+  }
+
+  /** Moves `v` into [min, max]; true if it changed. With min after max, max wins. */
+  bool clamp(IsoDateTime* v) const {
+    bool changed = false;
+    if (min_.active() && min_.compare(*v) < 0) {
+      min_.apply(v);
+      changed = true;
+    }
+    if (max_.active() && max_.compare(*v) > 0) {
+      max_.apply(v);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /**
+   * Disables the calendar days outside the date range in the month shown
+   * and the arrows to months wholly outside it. lv_calendar re-enables the
+   * days whenever the month changes, so this runs after every change.
+   */
+  void apply_range() {
+    if (!calendar_) return;
+    const lv_calendar_date_t* shown = lv_calendar_get_showed_date(calendar_);
+    const int y = shown->year, m = shown->month;
+    const bool lo = min_.use_date, hi = max_.use_date;
+    if (lo || hi) {
+      lv_obj_t* days = lv_calendar_get_btnmatrix(calendar_);
+      const int first = first_weekday(y, m);
+      IsoDateTime d;
+      d.year = y;
+      d.month = m;
+      for (d.day = 1; d.day <= days_in_month(y, m); ++d.day) {
+        if ((lo && compare_dates(d, min_.at) < 0) || (hi && compare_dates(d, max_.at) > 0)) {
+          lv_buttonmatrix_set_button_ctrl(days, static_cast<uint32_t>(d.day - 1 + first + 7),
+                                          LV_BUTTONMATRIX_CTRL_DISABLED);
+        }
+      }
+    }
+    // The previous month ends before min / the next one starts after max.
+    const bool no_prev = lo && (y * 12 + m) <= (min_.at.year * 12 + min_.at.month);
+    const bool no_next = hi && (y * 12 + m) >= (max_.at.year * 12 + max_.at.month);
+    if (prev_month_) lv_obj_set_state(prev_month_, LV_STATE_DISABLED, no_prev);
+    if (next_month_) lv_obj_set_state(next_month_, LV_STATE_DISABLED, no_next);
+  }
+
+  static void dismiss(void* self) { static_cast<DateTimeInput*>(self)->popup_.close(); }
+  void on_cancel(lv_event_t*) { popup_.close(); }
+
+  void on_ok(lv_event_t*) {
+    IsoDateTime v = picked();
+    clamp(&v);
     const std::string text = format_iso8601(v, enable_date_, enable_time_, parsed_ok_ ? &parsed_ : nullptr);
     popup_.close();
-    calendar_ = hour_roller_ = minute_roller_ = ok_ = nullptr;
+    calendar_ = hour_roller_ = minute_roller_ = ok_ = prev_month_ = next_month_ = nullptr;
     a2ui::NodePtr node = view_->node_ptr();
     node->write("value", Json(text));
   }
@@ -394,6 +542,10 @@ class DateTimeInput : public ComponentInstance {
   lv_obj_t* hour_roller_ = nullptr;
   lv_obj_t* minute_roller_ = nullptr;
   lv_obj_t* ok_ = nullptr;
+  lv_obj_t* prev_month_ = nullptr;
+  lv_obj_t* next_month_ = nullptr;
+  Bound min_;
+  Bound max_;
   lv_calendar_date_t highlighted_{};
   Popup popup_;
   bool enable_date_ = true;

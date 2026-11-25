@@ -1,7 +1,8 @@
 // Copyright 2026 The a2ui-lvgl Authors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Text (Markdown subset, see markdown.h) and Icon.
+// Text (Markdown subset, see markdown.h) and Icon (symbol glyphs, or an
+// svgPath filled by svg_path.h).
 //
 // Text renders plain content as an lv_label and switches to an lv_spangroup
 // only when the Markdown needs several fonts or blocks. Neither sets a
@@ -14,6 +15,10 @@
 #include "a2ui_lvgl/basic_catalog.h"
 #include "a2ui_lvgl/markdown.h"
 #include "basic_components.h"
+#include "svg_path.h"
+
+// Public in LVGL 9 but declared only in its private headers.
+extern "C" void lv_image_cache_drop(const void* src);
 
 namespace a2ui_lvgl {
 namespace basic {
@@ -276,18 +281,64 @@ constexpr IconEntry kIcons[] = {
 
 constexpr const char* kFallbackGlyph = LV_SYMBOL_BULLET;
 
+/** The path data of an Icon name of the form {"svgPath": ...}; empty otherwise. */
+std::string svg_path_of(const NodeView& view) {
+  const a2ui::PropValue* p = view.prop("name");
+  if (!p) return {};
+  if (p->is_object()) {
+    const a2ui::PropValue* m = p->find("svgPath");
+    return m && m->value().is_string() ? m->value().as_string() : std::string();
+  }
+  const a2ui::Json& v = view.value("name");
+  const a2ui::Json* m = v.is_object() ? v.find("svgPath") : nullptr;
+  return m && m->is_string() ? m->as_string() : std::string();
+}
+
+/**
+ * Icon: a label with a symbol glyph for a catalog name, or, for an svgPath
+ * name, a box of Theme::icon_size pixels showing the path as an A8 mask
+ * (svg_path.h) tinted with the inherited text colour.
+ */
 class Icon : public ComponentInstance {
  public:
+  ~Icon() override { drop_mask(); }
+
   lv_obj_t* mount(NodeView& view, lv_obj_t* parent) override {
-    const Styles& s = styles(view);
-    obj_ = lv_label_create(parent);
-    lv_obj_add_style(obj_, const_cast<lv_style_t*>(&s.leaf), 0);
-    if (view.theme().icon) lv_obj_set_style_text_font(obj_, view.theme().icon, 0);
-    lv_label_set_text_static(obj_, "");
+    parent_ = parent;
+    obj_ = make_glyph(view);
     return obj_;
   }
 
   void update(NodeView& view) override {
+    const std::string path = svg_path_of(view);
+    const int32_t size = view.theme().icon_size > 0 ? view.theme().icon_size : 24;
+    if (path != path_ || size != mask_size_) {
+      path_ = path;
+      drop_mask();
+      if (!path.empty() && render_svg_path(path, size, &mask_)) {
+        mask_size_ = size;
+        image_.header.magic = LV_IMAGE_HEADER_MAGIC;
+        image_.header.cf = LV_COLOR_FORMAT_A8;
+        image_.header.w = static_cast<uint32_t>(size);
+        image_.header.h = static_cast<uint32_t>(size);
+        image_.header.stride = static_cast<uint32_t>(size);
+        image_.data_size = static_cast<uint32_t>(mask_.size());
+        image_.data = mask_.data();
+      }
+    }
+    const bool use_path = !mask_.empty();
+    if (use_path != is_path_) {
+      lv_obj_t* replacement = use_path ? make_path_box(view) : make_glyph(view);
+      view.swap_obj(replacement);
+      obj_ = replacement;
+      is_path_ = use_path;
+    }
+    if (use_path) {
+      name_.clear();
+      lv_obj_set_size(obj_, mask_size_, mask_size_);
+      lv_obj_invalidate(obj_);
+      return;
+    }
     const a2ui::Json& v = view.value("name");
     name_ = v.is_string() ? v.as_string() : std::string();
     const char* glyph = nullptr;
@@ -296,7 +347,13 @@ class Icon : public ComponentInstance {
     set_label_text(obj_, glyph);
   }
 
-  void describe(const NodeView&, a2ui::Json* out) const override { out->set("name", a2ui::Json(name_)); }
+  void describe(const NodeView&, a2ui::Json* out) const override {
+    if (is_path_) {
+      out->set("name", a2ui::Json::object({{"svgPath", a2ui::Json(path_)}}));
+    } else {
+      out->set("name", a2ui::Json(name_));
+    }
+  }
 
   void infer_accessibility(const NodeView&, Accessibility* out) const override {
     out->role = "img";
@@ -304,8 +361,59 @@ class Icon : public ComponentInstance {
   }
 
  private:
+  lv_obj_t* make_glyph(NodeView& view) {
+    const Styles& s = styles(view);
+    lv_obj_t* label = lv_label_create(parent_);
+    lv_obj_add_style(label, const_cast<lv_style_t*>(&s.leaf), 0);
+    if (view.theme().icon) lv_obj_set_style_text_font(label, view.theme().icon, 0);
+    lv_label_set_text_static(label, "");
+    return label;
+  }
+
+  lv_obj_t* make_path_box(NodeView& view) {
+    const Styles& s = styles(view);
+    lv_obj_t* box = lv_obj_create(parent_);
+    lv_obj_remove_style_all(box);
+    lv_obj_add_style(box, const_cast<lv_style_t*>(&s.leaf), 0);
+    lv_obj_set_clickable(box, false);
+    lv_obj_set_scrollable(box, false);
+    add_event<Icon, &Icon::on_draw>(box, LV_EVENT_DRAW_MAIN, this);
+    return box;
+  }
+
+  void on_draw(lv_event_t* e) {
+    if (mask_.empty()) return;
+    lv_obj_t* box = lv_event_get_current_target_obj(e);
+    lv_draw_image_dsc_t d;
+    lv_draw_image_dsc_init(&d);
+    d.src = &image_;
+    d.recolor = lv_obj_get_style_text_color_filtered(box, LV_PART_MAIN);
+    d.recolor_opa = LV_OPA_COVER;
+    d.opa = lv_obj_get_style_text_opa(box, LV_PART_MAIN);
+    lv_area_t area;
+    lv_obj_get_content_coords(box, &area);
+    area.x2 = area.x1 + mask_size_ - 1;
+    area.y2 = area.y1 + mask_size_ - 1;
+    lv_draw_image(lv_event_get_layer(e), &d, &area);
+  }
+
+  /** Frees the mask; LVGL may cache an image by its source address. */
+  void drop_mask() {
+    if (!mask_.empty()) lv_image_cache_drop(&image_);
+    mask_.clear();
+    mask_.shrink_to_fit();
+    mask_size_ = 0;
+    image_ = lv_image_dsc_t{};
+  }
+
+  lv_obj_t* parent_ = nullptr;
   lv_obj_t* obj_ = nullptr;
+  bool is_path_ = false;
   std::string name_;
+  std::string path_;
+  std::vector<uint8_t> mask_;
+  int32_t mask_size_ = 0;
+  lv_image_dsc_t image_{};
 };
 
 }  // namespace

@@ -79,7 +79,8 @@ enum class Axis { Row, Column };
  *     (content width when the container itself is content-sized);
  *   - Row: full-width children (Column, Card, fields) share the free space
  *     (grow 1); content-sized children (Text, Button) keep their content
- *     width, capped at the row's width.
+ *     width, capped at the row's width (the Row narrows overflowing text
+ *     after layout, see layout.cpp).
  * Fixed-size children (an icon, a small image) keep their size.
  */
 void layout_children(lv_obj_t* container, const std::vector<NodeView*>& kids, Axis axis, std::string_view align,
