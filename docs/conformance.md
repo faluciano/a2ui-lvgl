@@ -10,7 +10,7 @@ reproduces them.
 
 | Result | Cases | Meaning |
 |---|---|---|
-| Pass | 666 | |
+| Pass | 672 | |
 | Fail | 0 | |
 | Known failure | 1 | Listed with its reason in `test/known_failures.txt` |
 | Unsupported | 197 | Not run; see below |
@@ -29,9 +29,9 @@ The **unsupported** cases are:
 | 29 | They need a UI. They run in the adapter suites below instead. |
 | 2 | v0.8 messages without a version header. |
 
-One caveat on the `node_resolution` suite: 8 of its 31 cases are written for
-v1.0. The other 23 are v0.9.1 fixtures, which the test harness converts to
-v1.0 before running them. All 31 pass.
+One caveat on the `node_resolution` suite: 8 of its 32 cases are written for
+v1.0. The other 24 are v0.9.1 fixtures, which the test harness converts to
+v1.0 before running them. All 32 pass.
 
 ## Adapter suites
 
@@ -41,7 +41,7 @@ headless LVGL display: 36 of 36 pass.
 
 ## Unit tests
 
-`make unit` runs 98 tests of the core. `make lvgl-smoke` runs 107 checks of
+`make unit` runs 99 tests of the core. `make lvgl-smoke` runs 107 checks of
 the adapter. Formatting output is compared with golden values generated from
 Node's `Intl` (`tools/gen_intl_golden.mjs`).
 

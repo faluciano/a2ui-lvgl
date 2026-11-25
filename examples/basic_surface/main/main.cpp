@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // A2UI basic surface example: feeds an A2UI v1.0 sample (coffee_order.json,
-// a copy of the upstream catalogs/basic/v1/examples/13_coffee-order.json,
+// a copy of the upstream catalogs/basic/v1/examples/coffee-order.json,
 // embedded at build time) through the a2ui_core MessageProcessor and renders
 // it with the a2ui_lvgl adapter. Button actions are logged (they would go to
 // the agent).

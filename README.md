@@ -27,9 +27,9 @@ been tried yet; please
 
 | Check | Result |
 |---|---|
-| A2UI core conformance (v1.0 cases) | 666 pass, 0 fail, 1 documented exception |
+| A2UI core conformance (v1.0 cases) | 672 pass, 0 fail, 1 documented exception |
 | A2UI framework adapter conformance | 36 of 36 |
-| Unit tests | 98, plus 107 LVGL adapter checks |
+| Unit tests | 99, plus 107 LVGL adapter checks |
 | ESP-IDF v6.0 builds | ESP32, ESP32-S3, ESP32-C3, ESP32-P4, no warnings |
 
 Details, including what is skipped and why, are in

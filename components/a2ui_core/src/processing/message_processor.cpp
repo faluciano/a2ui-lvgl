@@ -206,6 +206,15 @@ CatalogPtr MessageProcessor::find_catalog(std::string_view id) const {
   return nullptr;
 }
 
+Status MessageProcessor::add_catalog(CatalogPtr catalog) {
+  if (disposed_) return make_error(ErrorKind::State, "MessageProcessor is disposed.");
+  if (!catalog) return catalog_error("Catalog is null.", std::string());
+  if (find_catalog(catalog->id())) return catalog_error("Catalog already registered: " + catalog->id(), std::string());
+  catalogs_.push_back(std::move(catalog));
+  rpc_->set_catalogs(catalogs_);
+  return ok_status();
+}
+
 void MessageProcessor::send_outbound(const Json& message) const {
   if (outbound_) outbound_(message);
 }
@@ -429,9 +438,15 @@ Status MessageProcessor::build_components(SurfaceModel& surface, const Json& com
           e.surface_id = sid;
           return e;
         }
-        comp_catalog = find_catalog(cid.as_string());
+        // A component runs in a catalog its surface holds, so a catalog added
+        // after the surface was created is not found (blueprint addCatalog).
+        {
+          auto held = surface.available_catalogs().find(cid.as_string());
+          comp_catalog = held != surface.available_catalogs().end() ? held->second : nullptr;
+        }
+        const CatalogPtr known = comp_catalog ? comp_catalog : find_catalog(cid.as_string());
         if (has_at && has_bare) {
-          const Catalog* check = comp_catalog ? comp_catalog.get() : default_catalog.get();
+          const Catalog* check = known ? known.get() : default_catalog.get();
           auto cc = custom_props(check);
           if (std::find(cc.begin(), cc.end(), "catalogId") == cc.end()) {
             Error e = validation("Component '" + id + "' cannot specify both '@catalogId' and legacy 'catalogId'.",
@@ -440,13 +455,15 @@ Status MessageProcessor::build_components(SurfaceModel& surface, const Json& com
             return e;
           }
         }
-        if (!comp_catalog) return catalog_error("Catalog not found: " + cid.as_string(), sid);
-        if (!is_catalog_version_compatible(comp_catalog->protocol_version(), surface.protocol_version())) {
-          return catalog_error("Component " + id + " catalog '" + cid.as_string() +
-                                   "' has different protocol version " +
-                                   version_label(comp_catalog->protocol_version()) + " than surface " + sid + " (" +
-                                   version_label(surface.protocol_version()) + ").",
-                               sid);
+        if (!comp_catalog) {
+          if (known && !is_catalog_version_compatible(known->protocol_version(), surface.protocol_version())) {
+            return catalog_error("Component " + id + " catalog '" + cid.as_string() +
+                                     "' has different protocol version " +
+                                     version_label(known->protocol_version()) + " than surface " + sid + " (" +
+                                     version_label(surface.protocol_version()) + ").",
+                                 sid);
+          }
+          return catalog_error("Catalog not found: " + cid.as_string(), sid);
         }
       } else if (default_catalog) {
         comp_catalog = default_catalog;

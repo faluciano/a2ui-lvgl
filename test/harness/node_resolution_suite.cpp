@@ -39,7 +39,9 @@ using a2ui::SurfaceModel;
 using harness::Json;
 using harness::Outcome;
 
-constexpr const char* kBasicV091 = "../specification/v0_9_1/catalogs/basic/catalog.json";
+// Upstream moved the v0.9.1 catalogs from specification/ to catalogs/ (#4150).
+constexpr const char* kBasicV091 = "../catalogs/basic/v0_9_1/catalog.json";
+constexpr const char* kBasicV091Old = "../specification/v0_9_1/catalogs/basic/catalog.json";
 constexpr const char* kBasicV1 = "../catalogs/basic/v1/catalog.json";
 constexpr const char* kBasicV1Id = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json";
 
@@ -546,7 +548,7 @@ HARNESS_ACTION("resolve_nodes", run_resolve_nodes) {
   if (!catalog_doc.is_object()) return Outcome::fail("catalog: " + load_error);
   const std::string version = a2ui::normalize_protocol_version(str(catalog_doc["protocolVersion"]));
   if (version != "1.0") {
-    if (catalog_rel != kBasicV091) return Outcome::unsupported("fixture catalog targets protocol " + version);
+    if (catalog_rel != kBasicV091 && catalog_rel != kBasicV091Old) return Outcome::unsupported("fixture catalog targets protocol " + version);
     cs.upgraded = true;
     catalog_rel = kBasicV1;
     catalog_doc = harness::load_json_file(ctx.conformance_path(catalog_rel), &load_error);

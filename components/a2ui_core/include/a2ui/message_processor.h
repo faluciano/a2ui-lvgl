@@ -165,6 +165,14 @@ class MessageProcessor {
   const std::vector<CatalogPtr>& catalogs() const { return catalogs_; }
   /** A supported catalog by id, or null. */
   CatalogPtr find_catalog(std::string_view id) const;
+  /**
+   * Adds a catalog after construction (blueprint `addCatalog`). Surfaces
+   * created afterwards can use it, callRendererFunction resolves it and
+   * get_renderer_capabilities lists it; surfaces created earlier keep the
+   * catalogs they were created with. ErrorKind::Catalog for a null catalog
+   * or an id the processor already holds; ErrorKind::State once disposed.
+   */
+  Status add_catalog(CatalogPtr catalog);
 
   /**
    * Validates and applies a payload: one message, an array of messages, or

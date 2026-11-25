@@ -257,3 +257,29 @@ TEST(processor_accepts_wrapper_and_text_and_reports_capabilities) {
   EXPECT_TRUE(p.model().surfaces().empty());
   EXPECT_TRUE(!p.process_text("[]").ok());
 }
+
+TEST(add_catalog_rejects_null_duplicate_and_disposed_and_reaches_capabilities) {
+  MessageProcessor p({basic()});
+  auto extra = a2ui::Catalog::from_json(
+      parse(R"({"catalogId":"test/extra","protocolVersion":"1.0","components":{}})"));
+  EXPECT_TRUE(extra.ok());
+  if (!extra.ok()) return;
+
+  EXPECT_EQ(p.add_catalog(nullptr).error().kind, a2ui::ErrorKind::Catalog);
+  EXPECT_EQ(p.add_catalog(basic()).error().kind, a2ui::ErrorKind::Catalog);
+  EXPECT_EQ(p.catalogs().size(), size_t{1});
+
+  EXPECT_TRUE(p.add_catalog(extra.value()).ok());
+  EXPECT_TRUE(p.find_catalog("test/extra") != nullptr);
+  EXPECT_TRUE(p.rpc().catalogs().size() == 2);
+  a2ui::CapabilitiesOptions caps;
+  caps.versions = {"1.0"};
+  auto r = p.get_renderer_capabilities(caps);
+  EXPECT_TRUE(r.ok());
+  if (r.ok()) EXPECT_TRUE(r.value().dump().find("test/extra") != std::string::npos);
+
+  p.dispose();
+  auto again = a2ui::Catalog::from_json(
+      parse(R"({"catalogId":"test/late","protocolVersion":"1.0","components":{}})"));
+  EXPECT_EQ(p.add_catalog(again.value()).error().kind, a2ui::ErrorKind::State);
+}

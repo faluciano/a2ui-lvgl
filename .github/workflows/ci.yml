@@ -60,7 +60,7 @@ jobs:
       - name: Render one example
         run: |
           build/cmake/render_sample \
-            third_party/a2ui/catalogs/basic/v1/examples/13_coffee-order.json \
+            third_party/a2ui/catalogs/basic/v1/examples/coffee-order.json \
             build/cmake/coffee.png --size 320x400
           test -s build/cmake/coffee.png
 
