@@ -67,7 +67,7 @@ void settle() {
 
 /** The basic catalog plus the harness functions (incrementCounter). */
 CatalogPtr basic_catalog_for_tests() {
-  auto base = Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
+  auto base = harness::load_basic_catalog();
   if (!base.ok()) return nullptr;
   CatalogPtr c = base.value();
   a2ui::basic_catalog::bind_functions(*c);
@@ -93,7 +93,7 @@ CatalogPtr inline_catalog(const Json& spec, std::string* error) {
   doc.set("protocolVersion", spec["protocolVersion"].is_string() ? spec["protocolVersion"] : Json("1.0"));
   if (spec.contains("components")) doc.set("components", spec["components"]);
   if (spec.contains("functions")) doc.set("functions", spec["functions"]);
-  auto r = Catalog::from_json(doc);
+  auto r = harness::load_catalog(doc);
   if (!r.ok()) {
     *error = r.error().message;
     return nullptr;

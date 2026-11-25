@@ -1,0 +1,3 @@
+# ESP32-C3: no PSRAM. Keep the basic catalog's schemas in flash (about 15 KB
+# of heap instead of about 220 KB); see docs/porting.md, "Memory on ESP-IDF".
+CONFIG_A2UI_COMPACT_CATALOG=y

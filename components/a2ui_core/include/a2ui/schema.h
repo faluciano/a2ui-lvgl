@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // A JSON Schema (draft 2020-12) interpreter for the subset that the A2UI
-// specification and catalogs use. Schemas are interpreted in place from
-// their parsed Json; nothing is compiled or copied.
+// specification and catalogs use. Schemas are interpreted in place, from
+// their parsed Json or from a PackedDocument in flash (a2ui/schema_node.h);
+// nothing is compiled or copied.
 //
 // Supported keywords:
 //   $ref (local, cross-document by name/$id/basename), $defs, type, enum,
@@ -39,6 +40,7 @@
 #include "a2ui/error.h"
 #include "a2ui/json.h"
 #include "a2ui/ref.h"
+#include "a2ui/schema_node.h"
 
 namespace a2ui {
 
@@ -68,14 +70,17 @@ class SchemaRegistry {
   /**
    * Resolves a JSON Pointer inside a document. Used for documents whose
    * parts live outside one Json tree (a loaded catalog keeps component
-   * schemas next to the document rather than inside it).
+   * schemas next to the document rather than inside it). Returns an absent
+   * node (or a null `const Json*`) when the pointer does not resolve.
    */
-  using PointerResolver = std::function<const Json*(std::string_view pointer)>;
+  using PointerResolver = std::function<SchemaNode(std::string_view pointer)>;
 
   /** Registers (or replaces) a document. Its `$id`, if any, is an alias. */
   void add(std::string name, Ref<const Json> document);
   /** Registers a document whose pointers go through `resolver`. */
   void add(std::string name, Ref<const Json> document, PointerResolver resolver);
+  /** Registers a packed document, which must outlive the registry (flash data does). */
+  void add(std::string name, const PackedDocument& document);
   /**
    * Makes a reference resolve to `schema` instead of its target. The key is
    * "<document name>#<pointer>", e.g. "common_types.json#/$defs/FunctionCall".
@@ -85,8 +90,8 @@ class SchemaRegistry {
 
   /** Index of the document a reference's document part names, or -1. */
   int find_document(std::string_view doc_part) const;
-  /** Resolves `pointer` in document `doc`. Returns nullptr if it does not exist. */
-  const Json* resolve_pointer(int doc, std::string_view pointer) const;
+  /** Resolves `pointer` in document `doc`. Absent if it does not exist. */
+  SchemaNode resolve_pointer(int doc, std::string_view pointer) const;
   const std::string& document_name(int doc) const { return docs_[static_cast<size_t>(doc)].name; }
   const Json* override_for(int doc, std::string_view pointer) const;
 
@@ -95,6 +100,7 @@ class SchemaRegistry {
     std::string name;
     std::string id;
     Ref<const Json> json;
+    const PackedDocument* packed = nullptr;
     PointerResolver resolver;
   };
   struct Override {
@@ -120,7 +126,8 @@ struct SchemaValidateOptions {
 /**
  * Validates `instance` against `schema`, which is evaluated as part of the
  * registry document `doc_name` (so "#/..." references resolve there). The
- * schema does not need to live inside that document.
+ * schema does not need to live inside that document. A `const Json&`
+ * converts to SchemaNode.
  *
  * Returns ok when valid. Otherwise an ErrorKind::Validation error whose
  * message names the first issue and whose `details` lists every issue; the
@@ -129,7 +136,7 @@ struct SchemaValidateOptions {
  * with keyword "$ref".
  */
 Status validate_schema(const SchemaRegistry& registry, std::string_view doc_name,
-                       const Json& schema, const Json& instance,
+                       SchemaNode schema, const Json& instance,
                        std::vector<ValidationIssue>* issues = nullptr,
                        const SchemaValidateOptions& options = {});
 

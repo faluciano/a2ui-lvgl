@@ -5,6 +5,7 @@
 //   conformance --repo-root third_party/a2ui --suites build/conformance/core
 //               [--suite <substr>] [--case <substr>] [--verbose]
 //               [--suite-file <path.json>]...   (run these files instead of --suites)
+//               [--compact]   (load every catalog with Catalog::from_packed)
 //
 // Known failures are listed in test/known_failures.txt (one case name per
 // line, `#` comments). They are reported but do not fail the run; a known
@@ -88,11 +89,13 @@ int main(int argc, char** argv) {
     else if (a == "--known-failures") known_path = next();
     else if (a == "--suite-file") suite_files.push_back(next());
     else if (a == "--verbose") ctx.verbose = true;
+    else if (a == "--compact") harness::set_compact_catalogs(true);
     else {
       std::fprintf(stderr, "unknown argument %s\n", a.c_str());
       return 2;
     }
   }
+  if (harness::compact_catalogs()) std::printf("Catalogs: compact (Catalog::from_packed)\n");
   if (ctx.repo_root.empty()) ctx.repo_root = "third_party/a2ui";
   ctx.conformance_root = ctx.repo_root + "/conformance";
   if (auto slash = suites_dir.find_last_of('/'); slash != std::string::npos) {

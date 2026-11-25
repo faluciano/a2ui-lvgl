@@ -71,7 +71,7 @@ class Checker {
       : catalog_(catalog), opt_(opt), reg_(catalog.schema_registry()) {
     reg_.add_override("common_types.json#/$defs/FunctionCall", function_call_envelope());
     // A catalog-local "#/$defs/FunctionCall" the catalog leaves undefined is the common one.
-    if (!catalog.source()["$defs"].contains("FunctionCall")) {
+    if (!catalog.source_node()["$defs"].contains("FunctionCall")) {
       reg_.add_override("catalog.json#/$defs/FunctionCall", function_call_envelope());
     }
   }
@@ -82,7 +82,7 @@ class Checker {
     if (issues.size() < 32) issues.push_back({path, keyword, std::move(message)});
   }
 
-  void schema_check(const Json& schema, const Json& instance, const std::string& path) {
+  void schema_check(SchemaNode schema, const Json& instance, const std::string& path) {
     std::vector<ValidationIssue> found;
     SchemaValidateOptions o;
     o.max_issues = 8;
@@ -151,7 +151,7 @@ class Checker {
       issue(path, "allowedCallers",
             "Function '" + name + "' cannot be called by renderer (allowedCallers is agentOnly).");
     }
-    const Json& schema = fn->api.schema;
+    const SchemaNode schema = fn->api.schema_node();
     if (schema["properties"].is_object()) {
       const Json wrapper = Json::object(
           {{"allOf", Json::array({Json::object({{"$ref", Json("common_types.json#/$defs/FunctionCommon")}}),
@@ -164,7 +164,7 @@ class Checker {
     // A definition without `properties` (minimal or shorthand form): check
     // the envelope and, when it is a schema, the args.
     schema_check(*function_call_envelope(), call, path);
-    const Json& args_schema = fn->api.args_schema;
+    const SchemaNode args_schema = fn->api.args_schema_node();
     const Json& args = call["args"];
     if (args_schema.is_object() && (args_schema.contains("type") || args_schema.contains("properties"))) {
       schema_check(args_schema, args.is_undefined() ? Json::object() : args, path + "/args");
@@ -292,12 +292,13 @@ Status validate_component_properties(const Catalog& catalog, const ComponentApi&
   }
 
   Json all = Json::array({Json::object({{"$ref", Json("common_types.json#/$defs/ComponentCommon")}})});
-  if (!api.schema.is_undefined()) {
-    const Json& closed = api.schema["additionalProperties"];
-    if (!closed.is_undefined() && !(closed.is_bool() && closed.as_bool())) {
+  const SchemaNode schema = api.schema_node();
+  if (schema) {
+    const SchemaNode closed = schema["additionalProperties"];
+    if (closed && !(closed.is_bool() && closed.as_bool())) {
       // A closed component schema still admits the envelope keys, which the
       // other SDKs strip before checking the component schema.
-      Json patched = api.schema;
+      Json patched = schema.to_json();
       Json p = patched["properties"].is_object() ? patched["properties"] : Json::object();
       for (const char* k : {"id", "component", "@catalogId", "@metadata", "@accessibility", "@checks"}) {
         if (!p.contains(k)) p.set(k, Json(true));
@@ -313,7 +314,7 @@ Status validate_component_properties(const Catalog& catalog, const ComponentApi&
        {"required", Json::array({Json("component")})}}));
   Json wrapper = Json::object({{"allOf", std::move(all)}});
   // A component added in code without a schema declares nothing to close.
-  if (!options.allow_unknown_properties && !api.schema.is_undefined()) {
+  if (!options.allow_unknown_properties && schema) {
     wrapper.set("unevaluatedProperties", Json(false));
   }
   c.schema_check(wrapper, *subject, "");

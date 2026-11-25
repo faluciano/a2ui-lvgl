@@ -156,6 +156,6 @@ Error invalid_arguments(const std::string& name);
 }  // namespace function_errors
 
 /** Coerces ValidationResult values to booleans where an args schema expects DynamicBoolean. */
-Json coerce_validation_results(const Json& schema, const Json& value);
+Json coerce_validation_results(SchemaNode schema, const Json& value);
 
 }  // namespace a2ui

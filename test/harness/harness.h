@@ -11,7 +11,9 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
+#include "a2ui/catalog.h"
 #include "a2ui/error.h"
 #include "a2ui/json.h"
 
@@ -95,5 +97,20 @@ bool targets_pre_v1(const Json& test_case);
 
 /** Regex search used for `message` expectations. */
 bool regex_search(const std::string& pattern, const std::string& text);
+
+/**
+ * Compact catalog mode (`--compact`): every catalog the suites load is
+ * packed (a2ui::PackedBuffer) and loaded with Catalog::from_packed, and the
+ * basic catalog comes from spec::packed(). Off: Catalog::from_json.
+ */
+void set_compact_catalogs(bool on);
+bool compact_catalogs();
+
+/** Catalog::from_json, or in compact mode from_packed on a packed copy of `doc`. */
+a2ui::Result<a2ui::CatalogPtr> load_catalog(const Json& doc, std::string_view catalog_id = {},
+                                            std::string_view protocol_version = {});
+
+/** The basic catalog (without function implementations), in the current mode. */
+a2ui::Result<a2ui::CatalogPtr> load_basic_catalog();
 
 }  // namespace harness

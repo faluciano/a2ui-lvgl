@@ -21,6 +21,32 @@ FunctionFn function_impl(const std::string& name);
 void bind_functions(Catalog& catalog);
 
 /**
+ * Loads the v1.0 basic catalog and binds its functions.
+ *
+ * Compact: Catalog::from_packed on the packed catalog in flash. The schemas
+ * are read in place and only the component and function summaries use the
+ * heap (about 15 KB on an ESP32). For chips without PSRAM.
+ *
+ * Not compact: Catalog::from_json on a freshly parsed copy of the catalog,
+ * which the catalog keeps (about 100 KB on an ESP32, plus the parsed common
+ * types). Catalog::to_json(), source() and ComponentApi::schema are Json.
+ *
+ * Validation gives the same results either way.
+ */
+Result<CatalogPtr> load(bool compact);
+
+/**
+ * load() with the build's choice: compact when CONFIG_A2UI_COMPACT_CATALOG
+ * is set (ESP-IDF, menuconfig "A2UI core"), with the CMake option
+ * A2UI_COMPACT_CATALOG, or when a2ui_core is compiled with
+ * -DA2UI_COMPACT_CATALOG=1.
+ */
+Result<CatalogPtr> load();
+
+/** True when load() loads the compact catalog. */
+bool compact_by_default();
+
+/**
  * Media URL validation shared by Image, Video and AudioPlayer
  * (basic catalog guide, "Media URLs"). Returns false when the URL must not load.
  */

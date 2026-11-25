@@ -11,6 +11,7 @@
 
 #include "a2ui/catalog.h"
 #include "a2ui/json.h"
+#include "a2ui/schema_node.h"
 
 namespace a2ui {
 namespace catalog_internal {
@@ -22,7 +23,7 @@ namespace catalog_internal {
 bool is_common_types_ref(std::string_view ref, std::string* def_name, std::string* rest);
 
 /** Entry names a `oneOf` union lists as `<prefix><name>` references. */
-std::vector<std::string> union_member_names(const Json& union_schema, std::string_view prefix);
+std::vector<std::string> union_member_names(SchemaNode union_schema, std::string_view prefix);
 
 /** {"oneOf": [{"$ref": "<prefix><name>"}...]}, plus the component discriminator if asked. */
 Json make_union(const std::vector<std::string>& names, std::string_view prefix, bool discriminator);
@@ -34,10 +35,10 @@ Json make_union(const std::vector<std::string>& names, std::string_view prefix, 
  * array of objects with such properties a nested list. Local "#/..." refs
  * resolve against the schema's own `$defs`, then `catalog_doc`.
  */
-ComponentApi::ChildRefs analyze_child_refs(const Json& schema, const Json& catalog_doc);
+ComponentApi::ChildRefs analyze_child_refs(SchemaNode schema, SchemaNode catalog_doc);
 
 /** Fills custom_envelope_properties and checkable (the Python SDK's get_custom_envelope_properties). */
-void analyze_envelope(const Json& schema, const Json& catalog_doc, ComponentApi* api);
+void analyze_envelope(SchemaNode schema, SchemaNode catalog_doc, ComponentApi* api);
 
 }  // namespace catalog_internal
 }  // namespace a2ui

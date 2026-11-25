@@ -6,7 +6,12 @@ reproduces them.
 
 ## Core suites
 
-`make conformance` runs `conformance/core/*.yaml` against `a2ui_core`.
+`make conformance` runs `conformance/core/*.yaml` against `a2ui_core` twice:
+once with catalogs loaded by `Catalog::from_json`, and once with
+`--compact`, where the harness packs every catalog document
+(`a2ui::PackedBuffer`) and loads it with `Catalog::from_packed`, and the basic
+catalog comes from the packed tables in flash (`spec::packed()`). Both runs
+give the results below.
 
 | Result | Cases | Meaning |
 |---|---|---|
@@ -37,11 +42,11 @@ v1.0 before running them. All 32 pass.
 
 `make adapter-conformance` runs `adapter_conformance.yaml`,
 `accessibility.yaml` and `markdown_subset.yaml` against `a2ui_lvgl` on a
-headless LVGL display: 36 of 36 pass.
+headless LVGL display, with both kinds of catalog: 36 of 36 pass each time.
 
 ## Unit tests
 
-`make unit` runs 99 tests of the core. `make lvgl-smoke` runs 165 checks of
+`make unit` runs 107 tests of the core. `make lvgl-smoke` runs 165 checks of
 the adapter. Formatting output is compared with golden values generated from
 Node's `Intl` (`tools/gen_intl_golden.mjs`).
 

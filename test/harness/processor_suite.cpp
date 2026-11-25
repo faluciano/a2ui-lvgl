@@ -52,7 +52,7 @@ std::string str(const Json& j) { return j.is_string() ? j.as_string() : std::str
 
 const CatalogPtr& basic_v1() {
   static const CatalogPtr cat = [] {
-    auto r = Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
+    auto r = harness::load_basic_catalog();
     CatalogPtr c = r.ok() ? r.value() : a2ui::make_ref<Catalog>();
     a2ui::basic_catalog::bind_functions(*c);
     return c;
@@ -108,7 +108,7 @@ struct CaseCatalogs {
 };
 
 CatalogPtr from_json_or_note(const Json& doc, const std::string& id, const std::string& version, std::string* error) {
-  auto r = Catalog::from_json(doc, id, version);
+  auto r = harness::load_catalog(doc, id, version);
   if (!r.ok()) {
     *error = r.error().message;
     return nullptr;

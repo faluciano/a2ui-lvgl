@@ -8,6 +8,7 @@
 #   make renders     render catalogs/basic/v1/examples and test/lvgl/renders to build/renders/*.png
 #   make simulator   build the SDL desktop simulator (needs SDL2) into build/sim/
 #   make e2e         run the WebSocket transport against examples/agent_surface/sample_agent.py
+#   make heap-report  live heap of the basic catalog and a card (no sanitizers)
 #
 # The LVGL targets are part of `all` and `test` when the third_party/lvgl
 # submodule is checked out; the core library and harness never depend on it.
@@ -86,7 +87,7 @@ SUITE_JSON += $(FIXTURE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.
 # Adapter-only suites outside core/.
 SUITE_JSON += build/conformance/adapter/markdown_subset.json
 
-.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders simulator e2e clean
+.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders simulator e2e heap-report clean
 
 all: $(BUILD)/libA2uiCore.a $(BUILD)/unit_tests $(BUILD)/conformance suites $(if $(HAVE_LVGL),lvgl)
 
@@ -150,17 +151,24 @@ suites: $(SUITE_JSON)
 unit: $(BUILD)/unit_tests suites
 	$(BUILD)/unit_tests
 
+# Each suite runs twice: with Catalog::from_json, then with every catalog
+# packed and loaded with Catalog::from_packed (the compact catalog).
+CONFORMANCE_ARGS = --repo-root $(UPSTREAM) --suites build/conformance/core $(if $(SUITE),--suite $(SUITE)) \
+	$(if $(CASE),--case $(CASE)) $(if $(VERBOSE),--verbose)
 conformance: $(BUILD)/conformance suites
-	$(BUILD)/conformance --repo-root $(UPSTREAM) --suites build/conformance/core $(if $(SUITE),--suite $(SUITE)) $(if $(CASE),--case $(CASE)) $(if $(VERBOSE),--verbose)
+	$(BUILD)/conformance $(CONFORMANCE_ARGS)
+	$(BUILD)/conformance $(CONFORMANCE_ARGS) --compact
 
 lvgl: $(BUILD)/lvgl_smoke_test $(BUILD)/adapter_conformance $(BUILD)/render_sample
 
 lvgl-smoke: $(BUILD)/lvgl_smoke_test
 	$(BUILD)/lvgl_smoke_test
 
+ADAPTER_CONFORMANCE_ARGS = --repo-root $(UPSTREAM) $(foreach f,$(ADAPTER_SUITES),--suite-file $(f)) \
+	$(if $(CASE),--case $(CASE)) $(if $(VERBOSE),--verbose)
 adapter-conformance: $(BUILD)/adapter_conformance $(ADAPTER_SUITES)
-	$(BUILD)/adapter_conformance --repo-root $(UPSTREAM) $(foreach f,$(ADAPTER_SUITES),--suite-file $(f)) \
-		$(if $(CASE),--case $(CASE)) $(if $(VERBOSE),--verbose)
+	$(BUILD)/adapter_conformance $(ADAPTER_CONFORMANCE_ARGS)
+	$(BUILD)/adapter_conformance $(ADAPTER_CONFORMANCE_ARGS) --compact
 
 # One PNG per basic catalog example and adapter fixture (480x800), for humans to look at.
 renders: $(BUILD)/render_sample
@@ -225,6 +233,20 @@ endif
 e2e: $(BUILD)/agent_e2e
 	UV=$(UV) test/e2e/run.sh $(BUILD)/agent_e2e
 
+# Counts live heap with its own operator new, so it builds without sanitizers
+# in a separate directory.
+HEAP_BUILD := build/heap
+$(BUILD)/heap_report: $(BUILD)/tools/heap_report/heap_report.o $(BUILD)/libA2uiCore.a
+	$(CXX) $^ $(LDFLAGS) -o $@
+
+heap-report:
+	@$(MAKE) --no-print-directory BUILD=$(HEAP_BUILD) SAN= OPT="-O2 -g" $(HEAP_BUILD)/heap_report
+	$(HEAP_BUILD)/heap_report
+	@echo
+	$(HEAP_BUILD)/heap_report --load
+	@echo
+	$(HEAP_BUILD)/heap_report --compact
+
 # The libraries use a2ui::Ref (a2ui/ref.h), not std::shared_ptr: on ESP-IDF
 # every std::shared_ptr control block creates a FreeRTOS mutex in internal
 # RAM. User-facing handles stay std::shared_ptr<void>; mark any other
@@ -257,3 +279,5 @@ clean:
 -include $(LVGL_OBJS:.o=.d) $(ADAPTER_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d) $(ADAPTER_CONF_OBJS:.o=.d) $(RENDER_OBJS:.o=.d)
 -include $(SIM_LVGL_OBJS:.o=.d) $(SIM_LIB_OBJS:.o=.d) $(SIM_APP_OBJS:.o=.d)
 -include $(E2E_OBJS:.o=.d)
+
+-include $(BUILD)/tools/heap_report/heap_report.d

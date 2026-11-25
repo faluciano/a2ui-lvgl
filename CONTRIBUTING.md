@@ -73,6 +73,7 @@ Do not edit these by hand. Each names its generator in its first lines.
 | File | Generator |
 |---|---|
 | `components/a2ui_core/src/schema/spec_documents_data.cpp` | `tools/embed_spec_documents.py` |
+| `components/a2ui_core/src/schema/packed_documents_data.cpp` | `tools/embed_spec_documents.py` |
 | `components/a2ui_core/src/locale/locale_tables.cpp` | `tools/gen_locale_tables.py` |
 | `components/a2ui_core/src/common/xid_tables.inc` | `tools/gen_xid_tables.py` |
 | `test/unit/locale_intl_golden.inc` | `tools/gen_intl_golden.mjs` |

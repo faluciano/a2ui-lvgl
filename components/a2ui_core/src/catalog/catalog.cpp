@@ -49,11 +49,12 @@ void Catalog::add_function(FunctionDecl decl) {
 }
 
 void Catalog::add_component(ComponentApi api) {
-  if (api.child_refs.empty() && api.schema.is_object()) {
-    api.child_refs = catalog_internal::analyze_child_refs(api.schema, source_);
+  const SchemaNode schema = api.schema_node();
+  if (api.child_refs.empty() && schema.is_object()) {
+    api.child_refs = catalog_internal::analyze_child_refs(schema, source_node());
   }
-  if (api.schema.is_object() && api.custom_envelope_properties.empty() && !api.checkable) {
-    catalog_internal::analyze_envelope(api.schema, source_, &api);
+  if (schema.is_object() && api.custom_envelope_properties.empty() && !api.checkable) {
+    catalog_internal::analyze_envelope(schema, source_node(), &api);
   }
   for (auto& c : components_) {
     if (c.name == api.name) {
@@ -118,45 +119,82 @@ Json code_function_definition(const FunctionApi& api) {
 
 }  // namespace
 
-const Json* Catalog::resolve_catalog_pointer(std::string_view pointer) const {
+SchemaNode Catalog::resolve_catalog_pointer(std::string_view pointer) const {
   std::string name;
   std::string_view rest;
   if (split_entry_pointer(pointer, "components", &name, &rest)) {
     if (const ComponentApi* c = find_component(name)) {
-      return c->schema.is_undefined() ? nullptr : resolve_json_pointer(c->schema, rest);
+      const SchemaNode schema = c->schema_node();
+      return schema ? resolve_node_pointer(schema, rest) : SchemaNode();
     }
   } else if (split_entry_pointer(pointer, "functions", &name, &rest)) {
-    if (const FunctionDecl* f = find_function(name); f && !f->api.schema.is_undefined()) {
-      return resolve_json_pointer(f->api.schema, rest);
+    if (const FunctionDecl* f = find_function(name)) {
+      if (const SchemaNode schema = f->api.schema_node()) return resolve_node_pointer(schema, rest);
     }
   }
-  if (const Json* j = resolve_json_pointer(source_, pointer)) return j;
+  if (const SchemaNode j = resolve_node_pointer(source_node(), pointer)) return j;
   // A local "#/$defs/X" the catalog does not define names the common type X
   // (the other SDKs bundle common types into the catalog's $defs).
   if (pointer.rfind("/$defs/", 0) == 0) {
-    if (auto common = spec::common_types(protocol_version_)) return resolve_json_pointer(*common, pointer);
+    if (const SchemaNode common = common_types_node()) return resolve_node_pointer(common, pointer);
   }
-  return nullptr;
+  return {};
+}
+
+SchemaNode Catalog::common_types_node() const {
+  if (packed_) {
+    const PackedDocument* common = spec::packed_common_types(protocol_version_);
+    return common ? SchemaNode::root(*common) : SchemaNode();
+  }
+  // spec::common_types keeps the parsed document for the program's lifetime.
+  return SchemaNode(spec::common_types(protocol_version_).get());
 }
 
 SchemaRegistry Catalog::schema_registry() const {
   SchemaRegistry reg;
-  if (auto common = spec::common_types(protocol_version_)) reg.add("common_types.json", common);
+  if (packed_) {
+    if (const PackedDocument* common = spec::packed_common_types(protocol_version_)) {
+      reg.add("common_types.json", *common);
+    }
+  } else if (auto common = spec::common_types(protocol_version_)) {
+    reg.add("common_types.json", common);
+  }
   reg.add("catalog.json", nullptr,
           [this](std::string_view pointer) { return resolve_catalog_pointer(pointer); });
   return reg;
 }
 
+Json Catalog::source_json() const {
+  if (!packed_) return source_;
+  // As from_json leaves it: the document without the loaded entries.
+  Json doc = SchemaNode::root(*packed_).to_json();
+  if (Json* comps = doc.find_mut("components"); comps && comps->is_object()) {
+    for (const auto& c : components_) comps->erase(c.name);
+  }
+  if (Json* fns = doc.find_mut("functions"); fns && fns->is_object()) {
+    for (const auto& f : functions_) fns->erase(f.api.name);
+  }
+  return doc;
+}
+
+namespace {
+
+Json schema_json(SchemaNode node) { return node.is_packed() ? node.to_json() : *node.json(); }
+
+}  // namespace
+
 Json Catalog::to_json() const {
-  Json out = source_.is_object() ? source_ : Json::object();
-  if (!source_.is_object()) {
+  const Json source = source_json();
+  Json out = source.is_object() ? source : Json::object();
+  if (!source.is_object()) {
     out.set("catalogId", Json(id_));
     out.set("protocolVersion", Json(protocol_version_));
   }
   if (!components_.empty() || out.contains("components")) {
     Json comps = out["components"].is_object() ? out["components"] : Json::object();
     for (const auto& c : components_) {
-      comps.set(c.name, c.schema.is_undefined() ? Json::object({{"type", Json("object")}}) : c.schema);
+      const SchemaNode schema = c.schema_node();
+      comps.set(c.name, schema ? schema_json(schema) : Json::object({{"type", Json("object")}}));
     }
     out.set("components", std::move(comps));
   }
@@ -165,7 +203,8 @@ Json Catalog::to_json() const {
     Json fns = out["functions"].is_object() ? out["functions"] : Json::object();
     for (const auto& f : functions_) {
       if (!f.api.name.empty() && f.api.name[0] == '@') continue;  // System functions.
-      fns.set(f.api.name, f.api.schema.is_undefined() ? code_function_definition(f.api) : f.api.schema);
+      const SchemaNode schema = f.api.schema_node();
+      fns.set(f.api.name, schema ? schema_json(schema) : code_function_definition(f.api));
       any = true;
     }
     if (any) out.set("functions", std::move(fns));
@@ -220,7 +259,8 @@ Result<CatalogPtr> Catalog::derive(std::string_view id, const std::vector<Derive
     d->functions_ = functions_;
   }
 
-  Json src = source_.is_object() ? source_ : Json::object();
+  Json src = source_json();
+  if (!src.is_object()) src = Json::object();
   for (const char* k : {"$id", "title", "description", "instructions"}) src.erase(k);
   src.set("catalogId", Json(d->id_));
   if (instructions) src.set("instructions", Json(*instructions));

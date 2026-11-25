@@ -148,7 +148,7 @@ Json function_signatures(const Catalog& c) {
 
 /** The SDK's own basic catalog: the embedded published v1 document. */
 CatalogPtr builtin_basic_catalog() {
-  auto r = Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
+  auto r = harness::load_basic_catalog();
   return r.ok() ? r.value() : nullptr;
 }
 
@@ -182,7 +182,7 @@ Outcome run_from_json(const Json& tc, const harness::Context& ctx) {
   const bool neutral_error = version.empty() && expect_error;
   if (!neutral_error && version != "1.0") return Outcome::unsupported("pre-v1.0 catalog");
 
-  auto r = Catalog::from_json(doc, str(tc["catalogId"]), str(tc["protocolVersion"]));
+  auto r = harness::load_catalog(doc, str(tc["catalogId"]), str(tc["protocolVersion"]));
   if (expect_error) {
     if (r.ok()) return harness::missing_error(*expect_error);
     return harness::check_error(r.error(), *expect_error);
@@ -272,7 +272,7 @@ Outcome run_to_json(const Json& tc, const harness::Context& ctx) {
   } else {
     std::string err;
     const Json doc = case_catalog(tc, ctx, &err);
-    auto r = Catalog::from_json(doc, str(tc["catalogId"]), str(tc["protocolVersion"]));
+    auto r = harness::load_catalog(doc, str(tc["catalogId"]), str(tc["protocolVersion"]));
     if (!r.ok()) return Outcome::fail("from_json failed: " + r.error().message);
     cat = r.value();
   }
@@ -289,12 +289,12 @@ Outcome run_round_trip(const Json& tc, const harness::Context& ctx) {
   const Json doc = case_catalog(tc, ctx, &err);
   if (doc.is_undefined()) return Outcome::fail("cannot load catalog: " + err);
   if (case_version(tc, doc) != "1.0") return Outcome::unsupported("pre-v1.0 catalog");
-  auto r = Catalog::from_json(doc, str(tc["catalogId"]), str(tc["protocolVersion"]));
+  auto r = harness::load_catalog(doc, str(tc["catalogId"]), str(tc["protocolVersion"]));
   if (!r.ok()) return Outcome::fail("from_json failed: " + r.error().message);
   const Json out = r.value()->to_json();
   auto mm = compare_documents(doc, out);
   if (!mm.empty()) return Outcome::fail("round trip differs: " + mm);
-  auto again = Catalog::from_json(out, str(tc["catalogId"]), str(tc["protocolVersion"]));
+  auto again = harness::load_catalog(out, str(tc["catalogId"]), str(tc["protocolVersion"]));
   if (!again.ok()) return Outcome::fail("second from_json failed: " + again.error().message);
   mm = compare_documents(out, again.value()->to_json());
   return mm.empty() ? Outcome::pass() : Outcome::fail("second round trip differs: " + mm);
@@ -306,7 +306,7 @@ Outcome run_validation_schema(const Json& tc, const harness::Context& ctx) {
   if (doc.is_undefined()) return Outcome::fail("cannot load catalog: " + err);
   if (case_version(tc, doc) != "1.0") return Outcome::unsupported("pre-v1.0 catalog");
   std::string id = str(tc["catalogId"]);
-  auto r = Catalog::from_json(doc, id, str(tc["protocolVersion"]));
+  auto r = harness::load_catalog(doc, id, str(tc["protocolVersion"]));
   if (const Json* ee = harness::find_expect_error(tc)) {
     if (r.ok()) return harness::missing_error(*ee);
     return harness::check_error(r.error(), *ee);
@@ -339,7 +339,7 @@ Outcome run_derive(const Json& tc, const harness::Context& ctx) {
   const Json doc = case_catalog(tc, ctx, &err);
   if (doc.is_undefined()) return Outcome::fail("cannot load catalog: " + err);
   if (case_version(tc, doc) != "1.0") return Outcome::unsupported("pre-v1.0 catalog");
-  auto src = Catalog::from_json(doc);
+  auto src = harness::load_catalog(doc);
   if (!src.ok()) return Outcome::fail("from_json failed: " + src.error().message);
   const Json& args = tc["args"];
   std::vector<a2ui::DeriveEntry> comps, fns;

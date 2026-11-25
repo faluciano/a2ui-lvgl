@@ -21,6 +21,7 @@
 #include "a2ui/error.h"
 #include "a2ui/json.h"
 #include "a2ui/schema.h"
+#include "a2ui/schema_node.h"
 #include "a2ui/ref.h"
 
 namespace a2ui {
@@ -61,16 +62,25 @@ struct FunctionApi {  // [core]
    * (catalogs may also declare "validationResult").
    */
   std::string return_type = "any";
-  /** JSON Schema for the `args` object. */
+  /** JSON Schema for the `args` object. Undefined in a compact catalog: use args_schema_node(). */
   Json args_schema;
   /**
    * The function's whole definition as the catalog declares it (validates a
-   * complete call: `@call`, `args`). Undefined for functions added in code.
+   * complete call: `@call`, `args`). Undefined for functions added in code,
+   * and in a compact catalog: use schema_node().
    */
   Json schema;
+  /** In a compact catalog: `schema` and `args_schema` as packed nodes (else absent). */
+  SchemaNode packed_schema;
+  SchemaNode packed_args_schema;
   AllowedCallers allowed_callers = AllowedCallers::RendererOnly;
   bool requires_user_activation = false;
+  /** Undefined in a compact catalog (read it from schema_node()). */
   Json description;
+
+  /** The definition, from whichever form holds it (absent if none). */
+  SchemaNode schema_node() const { return packed_schema ? packed_schema : SchemaNode(schema); }
+  SchemaNode args_schema_node() const { return packed_args_schema ? packed_args_schema : SchemaNode(args_schema); }
 };
 
 struct FunctionDecl {  // [core]
@@ -96,8 +106,15 @@ enum class PropertyKind : uint8_t {
 
 struct ComponentApi {  // [core]
   std::string name;
-  /** The component's JSON Schema as declared in the catalog. */
+  /**
+   * The component's JSON Schema as declared in the catalog. Undefined in a
+   * compact catalog, where packed_schema holds it; schema_node() reads
+   * either.
+   */
   Json schema;
+  /** In a compact catalog: the schema as a packed node (else absent). */
+  SchemaNode packed_schema;
+  SchemaNode schema_node() const { return packed_schema ? packed_schema : SchemaNode(schema); }
   /** Classification of each top-level property, derived from schema $refs. */
   std::map<std::string, PropertyKind> property_kinds;
   /**
@@ -167,6 +184,10 @@ struct ComponentApi {  // [core]
 class Catalog;
 using CatalogPtr = Ref<Catalog>;
 
+namespace catalog_internal {
+struct Checked;
+}  // namespace catalog_internal
+
 /**
  * Normalizes a protocol version spelling ("v0.9", "0.9.1", "1.0", "v1.0.0")
  * to "1.0", "0.9" or "0.8". Returns an empty string for anything else.
@@ -208,6 +229,29 @@ class Catalog {
    */
   static Result<CatalogPtr> from_json(const Json& document, std::string_view catalog_id = {},
                                       std::string_view protocol_version = {});
+  /** As above, but takes the document instead of copying it (one tree in RAM, not two). */
+  static Result<CatalogPtr> from_json(Json&& document, std::string_view catalog_id = {},
+                                      std::string_view protocol_version = {});
+
+  /**
+   * Loads a catalog from a packed document (a2ui/schema_node.h), such as
+   * spec::packed(spec::Document::BasicCatalogV1), with the same checks and
+   * results as from_json. This is the compact catalog: schemas stay in the
+   * packed tables and are validated in place, so only the component and
+   * function summaries (names, property kinds, child slots) use the heap.
+   * `document` must outlive the catalog and every catalog derived from it;
+   * the generated documents live in flash.
+   *
+   * In a compact catalog ComponentApi::schema, FunctionApi::schema,
+   * args_schema and description are undefined (use schema_node() and
+   * args_schema_node()), source() is undefined (use source_node()), and
+   * the common types are the packed ones (spec::packed_common_types).
+   */
+  static Result<CatalogPtr> from_packed(const PackedDocument& document, std::string_view catalog_id = {},
+                                        std::string_view protocol_version = {});
+
+  /** True for a catalog loaded with from_packed. */
+  bool is_compact() const { return packed_ != nullptr; }
 
   /** The catalog document (unbundled: external references kept as written). */
   Json to_json() const;
@@ -266,10 +310,23 @@ class Catalog {
    * functions()). Resolve references through schema_registry().
    */
   const Json& source() const { return source_; }
-  void set_source(Json j) { source_ = std::move(j); }
+  void set_source(Json j) {
+    source_ = std::move(j);
+    packed_ = nullptr;
+  }
+  /**
+   * The source document as a node: source(), or for a compact catalog the
+   * whole packed document (loaded entries included).
+   */
+  SchemaNode source_node() const { return packed_ ? SchemaNode::root(*packed_) : SchemaNode(source_); }
 
  private:
-  const Json* resolve_catalog_pointer(std::string_view pointer) const;
+  static Result<CatalogPtr> build_from_json(Json document, catalog_internal::Checked checked);
+  SchemaNode resolve_catalog_pointer(std::string_view pointer) const;
+  /** The common types the catalog validates with (packed for a compact catalog). */
+  SchemaNode common_types_node() const;
+  /** source() as Json; for a compact catalog, a copy without the loaded entries. */
+  Json source_json() const;
 
   std::string id_;
   std::string protocol_version_ = "1.0";
@@ -277,6 +334,7 @@ class Catalog {
   std::vector<ComponentApi> components_;
   std::vector<FunctionDecl> functions_;
   Json source_;
+  const PackedDocument* packed_ = nullptr;
 };
 
 }  // namespace a2ui

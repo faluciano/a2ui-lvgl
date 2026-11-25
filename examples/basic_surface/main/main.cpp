@@ -21,7 +21,6 @@
 #include "a2ui/catalog.h"
 #include "a2ui/json.h"
 #include "a2ui/message_processor.h"
-#include "a2ui/spec_documents.h"
 #include "a2ui_lvgl/a2ui_lvgl.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
@@ -158,13 +157,14 @@ struct App {
 };
 
 App* start_a2ui(lv_display_t* disp) {
-  auto result = a2ui::Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
+  // Compact (schemas in flash) when CONFIG_A2UI_COMPACT_CATALOG is set, as
+  // it is for chips without PSRAM (sdkconfig.defaults.esp32c3).
+  auto result = a2ui::basic_catalog::load();
   if (!result.ok()) {
     ESP_LOGE(kTag, "basic catalog: %s", result.error().message.c_str());
     return nullptr;
   }
   a2ui::CatalogPtr catalog = result.value();
-  a2ui::basic_catalog::bind_functions(*catalog);
 
   auto* app = new App();
   a2ui::MessageProcessorOptions options;

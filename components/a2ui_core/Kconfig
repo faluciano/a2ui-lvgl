@@ -1,0 +1,21 @@
+menu "A2UI core"
+
+    config A2UI_COMPACT_CATALOG
+        bool "Compact basic catalog (schemas in flash)"
+        default n
+        help
+            Makes a2ui::basic_catalog::load() load the compact basic catalog
+            (Catalog::from_packed). Its JSON schemas stay in flash as
+            constant tables and are validated in place, so the catalog takes
+            about 15 KB of heap instead of about 220 KB. Validation gives the
+            same results.
+
+            Turn this on for chips without PSRAM, such as the ESP32-C3.
+
+            In a compact catalog, ComponentApi::schema, FunctionApi::schema
+            and Catalog::source() are undefined; read the schemas through
+            schema_node() and source_node(). Code that calls
+            Catalog::from_json or Catalog::from_packed directly is not
+            affected by this option.
+
+endmenu

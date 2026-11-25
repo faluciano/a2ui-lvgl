@@ -12,11 +12,9 @@ calls, and reports the user's actions. A renderer such as
 ```cpp
 #include "a2ui/basic_catalog.h"
 #include "a2ui/message_processor.h"
-#include "a2ui/spec_documents.h"
 
-auto catalog = a2ui::Catalog::from_json(
-    *a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1)).value();
-a2ui::basic_catalog::bind_functions(*catalog);
+// The basic catalog with its functions. load(true) keeps its schemas in flash.
+auto catalog = a2ui::basic_catalog::load().value();
 
 a2ui::MessageProcessorOptions options;
 options.forward_actions = true;
@@ -27,8 +25,9 @@ a2ui::MessageProcessor processor({catalog}, std::move(options));
 processor.process_text(json_from_agent);
 ```
 
-Loading the basic catalog needs about 150 KB of heap on a 32-bit chip
-(estimated), so use a chip with PSRAM. See the
+The basic catalog takes about 17 KB of heap in its compact form (schemas in
+flash; `CONFIG_A2UI_COMPACT_CATALOG` or `load(true)`) and about 150 KB parsed
+into RAM, measured on an ESP32-C3. See the
 [project README](https://github.com/faluciano/a2ui-lvgl#readme) for status,
 memory figures and limitations.
 
