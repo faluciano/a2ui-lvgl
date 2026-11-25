@@ -7,6 +7,7 @@
 #   make adapter-conformance   run the framework adapter suites against a2ui_lvgl
 #   make renders     render catalogs/basic/v1/examples and test/lvgl/renders to build/renders/*.png
 #   make simulator   build the SDL desktop simulator (needs SDL2) into build/sim/
+#   make simulator-smoke  run it headless on one example (tools/simulator/smoke.sh)
 #   make e2e         run the WebSocket transport against examples/agent_surface/sample_agent.py
 #   make heap-report  live heap of the basic catalog and a card (no sanitizers)
 #
@@ -87,7 +88,7 @@ SUITE_JSON += $(FIXTURE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.
 # Adapter-only suites outside core/.
 SUITE_JSON += build/conformance/adapter/markdown_subset.json
 
-.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders simulator e2e heap-report clean
+.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders simulator simulator-smoke e2e heap-report clean
 
 all: $(BUILD)/libA2uiCore.a $(BUILD)/unit_tests $(BUILD)/conformance suites $(if $(HAVE_LVGL),lvgl)
 
@@ -229,6 +230,9 @@ else
 simulator: $(SIM)/a2ui_simulator
 	@echo "built $(SIM)/a2ui_simulator"
 endif
+
+simulator-smoke: simulator
+	tools/simulator/smoke.sh $(SIM)/a2ui_simulator $(SIM)/smoke
 
 e2e: $(BUILD)/agent_e2e
 	UV=$(UV) test/e2e/run.sh $(BUILD)/agent_e2e

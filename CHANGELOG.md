@@ -7,6 +7,10 @@ minor versions may change the API.
 
 Tracks upstream A2UI at c26be2dd (was 58379ad4).
 
+- `make simulator-smoke` (`tools/simulator/smoke.sh`) runs the simulator
+  headless on coffee-order, clicks "Add to cart" and checks for the action,
+  a screenshot and no errors. CI runs it on Linux (apt `libsdl2-dev`) and
+  macOS (Homebrew `sdl2`).
 - Function calls the renderer runs itself accept `null` arguments, as the
   Swift core does (`DataContext.areLocalArgumentsValid`, upstream #3741). A
   data binding whose path has no value yet resolves to `null`; the argument

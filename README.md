@@ -73,7 +73,7 @@ make e2e       # a host renderer against the sample WebSocket agent
 your agent's output looks like before you flash anything.
 
 To click and type as well, build the SDL desktop simulator. It needs SDL2
-(`libsdl2-dev` on Debian and Ubuntu; so far tried on Linux only):
+(`libsdl2-dev` on Debian and Ubuntu; tried on Linux and macOS; CI runs it headless on both):
 
 ```sh
 make simulator

@@ -47,6 +47,44 @@ jobs:
       - name: Unit tests and conformance suites
         run: make -j"$(nproc)" CC=clang CXX=clang++ test
 
+  simulator-linux:
+    name: Simulator (Linux, SDL2, headless)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Install SDL2
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsdl2-dev
+      - name: Build and run headless
+        run: make -j"$(nproc)" simulator-smoke
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: simulator-linux
+          path: build/sim/smoke/
+          if-no-files-found: ignore
+
+  simulator-macos:
+    name: Simulator (macOS, SDL2, headless)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Install SDL2
+        run: brew install sdl2 pkgconf
+      - name: Build and run headless
+        run: make -j"$(sysctl -n hw.ncpu)" CC=clang CXX=clang++ simulator-smoke
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: simulator-macos
+          path: build/sim/smoke/
+          if-no-files-found: ignore
+
   cmake:
     name: Plain CMake build
     runs-on: ubuntu-24.04
