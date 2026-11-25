@@ -1,0 +1,15 @@
+menu "A2UI stack probe"
+
+    choice PROBE_CATALOG
+        prompt "How the catalog scenario loads the basic catalog"
+        default PROBE_CATALOG_LOAD
+        help
+            Compare the memory of the ways to load the basic catalog.
+
+        config PROBE_CATALOG_LOAD
+            bool "basic_catalog::load() (compact if A2UI_COMPACT_CATALOG)"
+        config PROBE_CATALOG_SPEC_PARSED
+            bool "Catalog::from_json(*spec::parsed()), as in 0.1.0"
+    endchoice
+
+endmenu

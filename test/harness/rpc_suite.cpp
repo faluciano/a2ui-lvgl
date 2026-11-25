@@ -74,7 +74,7 @@ Json decode_numbers(const Json& v) {
 
 const CatalogPtr& basic_v1() {
   static CatalogPtr c = [] {
-    auto r = Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
+    auto r = harness::load_basic_catalog();
     CatalogPtr cat = r.ok() ? r.value() : a2ui::make_ref<Catalog>();
     a2ui::basic_catalog::bind_functions(*cat);
     return cat;

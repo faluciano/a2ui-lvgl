@@ -14,6 +14,7 @@
 #include "a2ui/identifier.h"
 #include "a2ui/locale.h"
 #include "a2ui/regex.h"
+#include "a2ui/spec_documents.h"
 
 namespace a2ui {
 namespace basic_catalog {
@@ -245,6 +246,25 @@ void bind_functions(Catalog& catalog) {
     if (catalog.find_function(entry.first)) (void)catalog.bind_function(entry.first, entry.second);
   }
 }
+
+Result<CatalogPtr> load(bool compact) {
+  Result<CatalogPtr> r = compact ? Catalog::from_packed(*spec::packed(spec::Document::BasicCatalogV1))
+                                 : Catalog::from_json(Json::parse(spec::text(spec::Document::BasicCatalogV1)).value);
+  if (r.ok()) bind_functions(*r.value());
+  return r;
+}
+
+// A2UI_COMPACT_CATALOG comes from the build: CMakeLists.txt defines it for
+// CONFIG_A2UI_COMPACT_CATALOG (ESP-IDF) or the A2UI_COMPACT_CATALOG option.
+bool compact_by_default() {
+#if defined(A2UI_COMPACT_CATALOG) && A2UI_COMPACT_CATALOG
+  return true;
+#else
+  return false;
+#endif
+}
+
+Result<CatalogPtr> load() { return load(compact_by_default()); }
 
 bool is_allowed_open_url(const std::string& raw) {
   std::string url = raw;

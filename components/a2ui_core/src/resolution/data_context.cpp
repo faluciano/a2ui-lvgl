@@ -35,37 +35,36 @@ Error invalid_arguments(const std::string& name) {
 
 namespace {
 
-bool ref_ends_with(const Json& schema, const char* suffix) {
-  const Json* ref = schema.find("$ref");
-  if (!ref || !ref->is_string()) return false;
-  const std::string& r = ref->as_string();
-  const std::string s(suffix);
-  return r.size() >= s.size() && r.compare(r.size() - s.size(), s.size(), s) == 0;
+bool ref_ends_with(SchemaNode schema, std::string_view suffix) {
+  const SchemaNode ref = schema.find("$ref");
+  if (!ref.is_string()) return false;
+  const std::string_view r = ref.as_string();
+  return r.size() >= suffix.size() && r.compare(r.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-bool is_dynamic_expression_branch(const Json& schema) {
+bool is_dynamic_expression_branch(SchemaNode schema) {
   if (schema.contains("$ref")) {
     return ref_ends_with(schema, "/$defs/DataBinding") || ref_ends_with(schema, "/$defs/FunctionCall");
   }
-  const Json* props = schema.find("properties");
-  if (props && props->is_object() && !props->contains("componentId")) {
-    return props->contains("@path") || props->contains("path") || props->contains("@call") ||
-           props->contains("call");
+  const SchemaNode props = schema.find("properties");
+  if (props.is_object() && !props.contains("componentId")) {
+    return props.contains("@path") || props.contains("path") || props.contains("@call") ||
+           props.contains("call");
   }
   return false;
 }
 
-bool is_dynamic_boolean_schema(const Json& schema) {
+bool is_dynamic_boolean_schema(SchemaNode schema) {
   if (ref_ends_with(schema, "/$defs/DynamicBoolean")) return true;
   if (schema["type"].is_string() && schema["type"].as_string() == "boolean") return true;
-  for (const auto& s : schema["allOf"].as_array()) {
+  for (SchemaNode s : schema["allOf"].items()) {
     if (is_dynamic_boolean_schema(s)) return true;
   }
   for (const char* kw : {"oneOf", "anyOf"}) {
-    const auto& subs = schema[kw].as_array();
-    if (subs.empty()) continue;
+    const SchemaNode subs = schema[kw];
+    if (!subs.is_array() || subs.empty()) continue;
     bool has_bool = false, only = true;
-    for (const auto& s : subs) {
+    for (SchemaNode s : subs.items()) {
       const bool b = is_dynamic_boolean_schema(s);
       has_bool = has_bool || b;
       const bool is_null = s["type"].is_string() && s["type"].as_string() == "null";
@@ -93,16 +92,16 @@ bool is_json_representable(const Json& v) {
   }
 }
 
-Json apply_defaults(const Json& schema, const Json& args) {
-  const Json* props = schema.find("properties");
-  if (!props || !props->is_object() || !args.is_object()) return args;
+Json apply_defaults(SchemaNode schema, const Json& args) {
+  const SchemaNode props = schema.find("properties");
+  if (!props.is_object() || !args.is_object()) return args;
   Json out = args;
-  for (const auto& m : props->as_object()) {
-    Json* existing = out.find_mut(m.first);
+  for (const auto& m : props.members()) {
+    Json* existing = out.find_mut(m.key);
     if (existing) {
-      if (existing->is_object()) *existing = apply_defaults(m.second, *existing);
-    } else if (const Json* def = m.second.find("default")) {
-      out.set(m.first, *def);
+      if (existing->is_object()) *existing = apply_defaults(m.value, *existing);
+    } else if (const SchemaNode def = m.value.find("default")) {
+      out.set(m.key, def.to_json());
     }
   }
   return out;
@@ -116,18 +115,18 @@ std::string unescape_key(const std::string& k) {
 
 }  // namespace
 
-Json coerce_validation_results(const Json& schema, const Json& value) {
+Json coerce_validation_results(SchemaNode schema, const Json& value) {
   if (is_dynamic_boolean_schema(schema)) return Json(coerce_bool(value));
-  if (const Json* items = schema.find("items"); items && value.is_array()) {
+  if (const SchemaNode items = schema.find("items"); items && value.is_array()) {
     Json out{Json::Array{}};
-    for (const auto& e : value.as_array()) out.push_back(coerce_validation_results(*items, e));
+    for (const auto& e : value.as_array()) out.push_back(coerce_validation_results(items, e));
     return out;
   }
-  if (const Json* props = schema.find("properties"); props && props->is_object() && value.is_object()) {
+  if (const SchemaNode props = schema.find("properties"); props.is_object() && value.is_object()) {
     Json out = Json::object();
     for (const auto& m : value.as_object()) {
-      const Json* ps = props->find(m.first);
-      out.set(m.first, ps ? coerce_validation_results(*ps, m.second) : m.second);
+      const SchemaNode ps = props.find(m.first);
+      out.set(m.first, ps ? coerce_validation_results(ps, m.second) : m.second);
     }
     return out;
   }
@@ -291,7 +290,7 @@ Json DataContext::evaluate_call(const std::string& name, const Json& call) {
   }
   Json args;
   if (!resolve_arguments(call, &args)) return nullptr;
-  args = coerce_validation_results(decl->api.args_schema, args);
+  args = coerce_validation_results(decl->api.args_schema_node(), args);
   if (auto v = host_->validate_function_args(decl->api, args); !v.ok()) {
     fail(function_errors::invalid_arguments(name), name);
     return nullptr;
@@ -338,7 +337,8 @@ Json DataContext::route_to_agent(const std::string& name, const FunctionDecl* de
     return nullptr;
   }
   if (decl) {
-    args = apply_defaults(decl->api.args_schema, coerce_validation_results(decl->api.args_schema, args));
+    const SchemaNode args_schema = decl->api.args_schema_node();
+    args = apply_defaults(args_schema, coerce_validation_results(args_schema, args));
     if (auto v = host_->validate_function_args(decl->api, args); !v.ok()) {
       fail(function_errors::invalid_arguments(name), name);
       return nullptr;

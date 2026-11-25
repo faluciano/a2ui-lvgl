@@ -11,7 +11,7 @@ port it, please open an issue or a pull request with what you found.
 |---|---|
 | Compiler | C++17. GCC and Clang are tested. Exceptions and RTTI are not used, and the libraries are compiled with them off. |
 | Standard library | The hosted C++ standard library: containers, `std::function`, `<memory>`, `<cmath>`. Shared ownership uses `a2ui::Ref` (see [Reference counting](#reference-counting)). |
-| Heap | The code allocates freely, mostly in small blocks. See [Memory on ESP-IDF](#memory-on-esp-idf). |
+| Heap | The code allocates freely, mostly in small blocks. The basic catalog takes about 17 KB in its compact form, 150 KB parsed into RAM. See [Memory on ESP-IDF](#memory-on-esp-idf). |
 | Floating point | Numbers are 64-bit doubles. Without a double-precision FPU this works, only slower. |
 | Clock | `gettimeofday`, `time` and `gmtime_r`, for action timestamps and the date functions. On bare metal, provide `gettimeofday`. |
 | Threads | None. Call every function from one thread, the one that runs LVGL. |
@@ -59,11 +59,61 @@ You do not need to configure anything, and your own code can keep using
 whole project, and code compiled into the prebuilt libstdc++ (`std::future`,
 for example) would no longer match.
 
+### The compact catalog
+
+`a2ui::basic_catalog::load()` loads the basic catalog and binds its functions,
+in one of two forms. The last row is the loading code 0.1.0 documented, for
+comparison.
+
+| Form | How | Heap (ESP32-C3) | Flash |
+|---|---|---|---|
+| Compact | `load(true)`, or `load()` with `CONFIG_A2UI_COMPACT_CATALOG=y` | 16.5 KB | 44 KB of tables |
+| Parsed into RAM | `load(false)`, or `load()` by default | 150 KB | |
+| The 0.1.0 snippet | `Catalog::from_json(*spec::parsed(...))` | 225 KB | |
+
+The compact form is `Catalog::from_packed(*spec::packed(Document::BasicCatalogV1))`.
+`tools/embed_spec_documents.py` flattens the catalog and the common types
+into constant tables (`PackedDocument`, `a2ui/schema_node.h`): nodes of two
+words each, and one pool of strings. The validator reads the schemas from
+the tables in place, so only the summary of each component and function
+(names, property kinds, child slots) is on the heap. The summaries are
+computed by the same code as for a parsed catalog, and `make test` runs the
+conformance suites with every catalog packed, so validation gives the same
+results.
+
+What changes in a compact catalog: `ComponentApi::schema`,
+`FunctionApi::schema`, `args_schema`, `description` and `Catalog::source()`
+are undefined. Read schemas through `schema_node()`, `args_schema_node()`
+and `source_node()`, which work for both forms. `Catalog::to_json()` returns
+the same document as for a parsed catalog.
+
+A catalog that arrives at run time can be packed too: `a2ui::PackedBuffer`
+builds the tables from a `Json`, and `Catalog::from_packed()` loads them. The
+buffer must outlive the catalog. It is on the heap, but smaller than the
+parsed `Json` (for the basic catalog, 28 KB against an estimated 80 KB on an
+ESP32), so free the `Json` once the catalog is loaded.
+
+The parsed form saves 75 KB over the 0.1.0 snippet because `load(false)`
+moves a temporary parse into the catalog (`Catalog::from_json(Json&&)`)
+instead of copying the cached `spec::parsed()` document. It also parses the
+common types (about 25 KB) on first use; the compact catalog uses their
+packed form.
+
+`make heap-report` prints host figures for the three ways of loading (64-bit,
+so larger than on an ESP32):
+
+```
+Catalog and processor: 253884 B in 4249 blocks (host, 64-bit)   0.1.0 snippet
+Catalog and processor: 169802 B in 2645 blocks (host, 64-bit)   load(false)
+Catalog and processor: 25873 B in 146 blocks (host, 64-bit)     load(true)
+```
+
 ### Internal RAM and PSRAM
 
 | What | Heap |
 |---|---|
-| Basic catalog, loaded once | about 220 KB |
+| Basic catalog, compact | about 17 KB |
+| Basic catalog, parsed into RAM | about 150 KB |
 | A typical card (`13_coffee-order`), with its LVGL widgets | about 80 KB |
 
 Almost every allocation is smaller than a few hundred bytes. With
@@ -71,8 +121,10 @@ Almost every allocation is smaller than a few hundred bytes. With
 `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` (16384 by default, 4096 in the example)
 from internal RAM first, and only spills into PSRAM once internal RAM runs
 out. On an ESP32-S3 with 8 MB of PSRAM and the example's settings, the
-catalog and the coffee-order card took about 300 KB of internal RAM, leaving
-about 80 KB, and a second, deeper card used up the rest.
+0.1.0 catalog and the coffee-order card took about 300 KB of internal RAM,
+leaving about 80 KB, and a second, deeper card used up the rest. The compact
+catalog would need about 200 KB less; that has not been measured on the
+ESP32-S3.
 
 There are two ways to move this into PSRAM:
 
@@ -114,28 +166,42 @@ There are two ways to move this into PSRAM:
   void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
   ```
 
-**Chips without PSRAM** do not have room for the basic catalog and a card. On
-the ESP32-C3, loading the catalog left about 90 KB of heap, and rendering the
-coffee-order card then ran out of memory. A compact catalog for these chips is
-on the roadmap.
+**Chips without PSRAM** need the compact catalog. On the ESP32-C3 (316 KB of
+heap at start), measured with `tools/stack_probe`:
+
+| Catalog | Catalog keeps | Coffee-order card |
+|---|---|---|
+| 0.1.0 snippet | 225 KB | does not start: about 90 KB left |
+| `load(false)` | 150 KB | runs out of memory |
+| `load(true)` (compact) | 16.5 KB | renders (79 KB); 172 KB left, with a 48 KB task stack allocated |
+
+The example's `sdkconfig.defaults.esp32c3` and `sdkconfig.defaults.esp32` turn
+the compact catalog on. Deep cards still do not fit: the probe's 25-level
+stress card ran out of memory on the ESP32-C3 even with the compact catalog.
+Processing a message briefly needs far more heap than the result keeps:
+`make heap-report` on the host shows the coffee-order card peaking at 57 KB
+while it is processed (19 KB kept), the 25-level card at 121 KB (42 KB kept)
+and the 50-level card at 219 KB (74 KB kept). The catalog form does not
+change these peaks.
 
 ### Stack
 
-Peak stack of a fresh task, measured on the ESP32-S3:
+Peak stack of a fresh task, measured on the ESP32-S3 with the catalog parsed
+into RAM:
 
 | What | Peak stack |
 |---|---|
-| Load the basic catalog | 5.4 KB |
-| A typical card (`13_coffee-order`): process the messages, build and draw the widgets | 8.6 KB |
+| Load the basic catalog | 6.9 KB |
+| A typical card (`13_coffee-order`): process the messages, build and draw the widgets | 9.3 KB |
 | A 25-level component tree: process / build and draw | 14.0 KB / 20.3 KB |
-| A 50-level tree, the default limit: process / build and draw | 23.6 KB / 35.5 KB |
+| A 50-level tree, the default limit: process / build and draw | 23.6 KB / 35.7 KB |
 | Typing into a field of the 50-level card (binding, checks, re-resolution) | 35.2 KB |
 
 The tree rows also nest the data model 46 levels and function calls 5 levels,
 the deepest a message may go. Building the widget tree costs about 600 bytes
 per level of component nesting, so tree depth sets the requirement. On the
-ESP32-C3 (RISC-V), loading the catalog used 7% less stack than on the
-ESP32-S3.
+ESP32-C3 (RISC-V) with the compact catalog, loading the catalog took 6.6 KB
+and the typical card 8.5 KB.
 
 Run everything that touches A2UI on one task: processing messages, building
 the `Surface`, and `lv_timer_handler()`, whose event handlers write bindings

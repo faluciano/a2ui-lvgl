@@ -62,6 +62,44 @@ Tracks upstream A2UI at c26be2dd (was 58379ad4).
   cart" and "Purchase" with data model updates.
 - `make e2e`: a host build of the transport's session code connects to the
   sample agent, renders, presses buttons, reconnects, and checks each step.
+- **Compact basic catalog for chips without PSRAM.** `Catalog::from_packed()`
+  loads a catalog from a `PackedDocument`: the JSON document flattened into
+  constant tables that stay in flash (`a2ui/schema_node.h`). The validator
+  reads the schemas in place, so only the component and function summaries
+  use the heap. `spec::packed()` has the basic catalog and the common types in
+  this form, generated with the text by `tools/embed_spec_documents.py`. On
+  the ESP32-C3 (QEMU) loading the basic catalog keeps 16.5 KB of heap instead
+  of 225 KB, and the coffee-order card now renders with about 170 KB to
+  spare. The packed tables add 44 KB of flash. Validation gives the same
+  results: `make test` runs the core and adapter conformance suites a second
+  time with every catalog packed, and they pass (672 and 36).
+- `basic_catalog::load()` loads the basic catalog and binds its functions.
+  It is compact when `CONFIG_A2UI_COMPACT_CATALOG` is set (new Kconfig menu
+  "A2UI core"; off by default) or with `load(true)`. The example turns it on
+  for the ESP32 and the ESP32-C3.
+- `Catalog::from_json(Json&&)` takes the document instead of copying it.
+  `basic_catalog::load(false)` parses the catalog into a temporary and moves
+  it in, so nothing keeps a second copy: 150 KB instead of 225 KB on the
+  ESP32-C3. That is still too much for the coffee-order card there.
+- **API changes.** Schemas are read through `a2ui::SchemaNode`, a view of a
+  `Json` value or of a packed node; a `const Json&` converts to one.
+  `validate_schema()` and `coerce_validation_results()` take a `SchemaNode`,
+  and `SchemaRegistry::PointerResolver` returns one (a resolver returning
+  `const Json*` still compiles). `SchemaRegistry::resolve_pointer()` returns a
+  `SchemaNode` instead of `const Json*`. In a compact catalog
+  `ComponentApi::schema`, `FunctionApi::schema`, `args_schema`, `description`
+  and `Catalog::source()` are undefined; `schema_node()`,
+  `args_schema_node()` and `source_node()` work with both kinds of catalog.
+- Reading schemas through `SchemaNode` costs some stack in shallow paths:
+  on the ESP32-S3, loading the catalog peaks at 6.9 KB (was 5.4 KB) and the
+  coffee-order card at 9.3 KB (was 8.6 KB). The figures for deep messages
+  are unchanged (within 0.2 KB).
+- `make heap-report` counts the heap the basic catalog and a card use on the
+  host, for each way of loading the catalog.
+- `tools/stack_probe` also prints the heap each scenario keeps, uses 48 KB
+  task stacks on chips without PSRAM so that it runs on the ESP32-C3 (and
+  skips the stress cards there), and can load the catalog the 0.1.0 way for
+  comparison (menuconfig "A2UI stack probe").
 
 ## 0.1.0
 

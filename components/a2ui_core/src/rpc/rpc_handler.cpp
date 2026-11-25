@@ -37,15 +37,15 @@ std::string version_label(const std::string& normalized) {
   return normalized == "1.0" ? "1.0" : "v" + normalized;
 }
 
-Json apply_schema_defaults(const Json& schema, const Json& args) {
-  const Json* props = schema.find("properties");
-  if (!props || !props->is_object() || !args.is_object()) return args;
+Json apply_schema_defaults(SchemaNode schema, const Json& args) {
+  const SchemaNode props = schema.find("properties");
+  if (!props.is_object() || !args.is_object()) return args;
   Json out = args;
-  for (const auto& m : props->as_object()) {
-    if (Json* existing = out.find_mut(m.first)) {
-      if (existing->is_object()) *existing = apply_schema_defaults(m.second, *existing);
-    } else if (const Json* def = m.second.find("default")) {
-      out.set(m.first, *def);
+  for (const auto& m : props.members()) {
+    if (Json* existing = out.find_mut(m.key)) {
+      if (existing->is_object()) *existing = apply_schema_defaults(m.value, *existing);
+    } else if (const SchemaNode def = m.value.find("default")) {
+      out.set(m.key, def.to_json());
     }
   }
   return out;
@@ -105,7 +105,7 @@ class InboundCallHost : public FunctionHost {
 
   /** Validates `args` against `api.args_schema` with the documents of the catalog declaring it. */
   Status validate_against_catalog(const FunctionApi& api, const Json& args) const {
-    const Json& schema = api.args_schema;
+    const SchemaNode schema = api.args_schema_node();
     if (!schema.is_object() || !(schema.contains("type") || schema.contains("properties"))) return ok_status();
     auto validate_in = [&](const Catalog& cat) -> std::optional<Status> {
       const FunctionDecl* d = cat.find_function(api.name);
@@ -371,7 +371,7 @@ Json RpcHandler::handle_call_renderer_function(const InternalOperation& op, Surf
   if (!host.validate_function_args(decl->api, args).ok()) {
     return fail(rpc_code::kInvalidFunctionCall, "Invalid arguments for function '" + name + "'.");
   }
-  args = apply_schema_defaults(decl->api.args_schema, args);
+  args = apply_schema_defaults(decl->api.args_schema_node(), args);
 
   auto result = decl->impl(args, ctx);
   if (!result.ok()) {

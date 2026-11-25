@@ -8,9 +8,35 @@
 #include <fstream>
 #include <map>
 #include <regex>
+#include <memory>
 #include <sstream>
+#include <vector>
+
+#include "a2ui/schema_node.h"
+#include "a2ui/spec_documents.h"
 
 namespace harness {
+
+namespace {
+bool g_compact = false;
+}  // namespace
+
+void set_compact_catalogs(bool on) { g_compact = on; }
+bool compact_catalogs() { return g_compact; }
+
+a2ui::Result<a2ui::CatalogPtr> load_catalog(const Json& doc, std::string_view catalog_id,
+                                            std::string_view protocol_version) {
+  if (!g_compact) return a2ui::Catalog::from_json(doc, catalog_id, protocol_version);
+  // Packed documents must outlive their catalogs; keep them all until exit.
+  static std::vector<std::unique_ptr<a2ui::PackedBuffer>> kept;
+  kept.push_back(std::make_unique<a2ui::PackedBuffer>(doc));
+  return a2ui::Catalog::from_packed(kept.back()->document(), catalog_id, protocol_version);
+}
+
+a2ui::Result<a2ui::CatalogPtr> load_basic_catalog() {
+  if (g_compact) return a2ui::Catalog::from_packed(*a2ui::spec::packed(a2ui::spec::Document::BasicCatalogV1));
+  return a2ui::Catalog::from_json(*a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1));
+}
 
 std::map<std::string, ActionFn>& action_registry() {
   static std::map<std::string, ActionFn> registry;

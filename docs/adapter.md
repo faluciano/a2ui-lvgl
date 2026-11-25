@@ -7,9 +7,7 @@ in its imperative form: each component has `mount`, `update` and `unmount`.
 ## Minimal use
 
 ```cpp
-auto catalog = a2ui::Catalog::from_json(
-    *a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1)).value();
-a2ui::basic_catalog::bind_functions(*catalog);
+auto catalog = a2ui::basic_catalog::load().value();  // load(true): schemas in flash
 
 a2ui::MessageProcessorOptions options;
 options.forward_actions = true;

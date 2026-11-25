@@ -267,7 +267,7 @@ void SurfaceModel::report_function_error(const Error& error, const std::string& 
 }
 
 Status SurfaceModel::validate_function_args(const FunctionApi& api, const Json& args) {
-  const Json& schema = api.args_schema;
+  const SchemaNode schema = api.args_schema_node();
   if (!schema.is_object() || !(schema.contains("type") || schema.contains("properties"))) return ok_status();
   // The catalog that declares this function provides the schema documents.
   for (const auto& entry : available_catalogs_) {

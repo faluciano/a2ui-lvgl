@@ -554,7 +554,7 @@ HARNESS_ACTION("resolve_nodes", run_resolve_nodes) {
     catalog_doc = harness::load_json_file(ctx.conformance_path(catalog_rel), &load_error);
     if (!catalog_doc.is_object()) return Outcome::fail("catalog: " + load_error);
   }
-  auto loaded = a2ui::Catalog::from_json(catalog_doc);
+  auto loaded = harness::load_catalog(catalog_doc);
   if (!loaded.ok()) return Outcome::fail("catalog load failed: " + loaded.error().message);
   cs.catalog = loaded.value();
   // Declared functions are recorders returning null.

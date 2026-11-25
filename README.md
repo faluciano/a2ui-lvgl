@@ -29,11 +29,12 @@ been tried yet; please
 |---|---|
 | A2UI core conformance (v1.0 cases) | 672 pass, 0 fail, 1 documented exception |
 | A2UI framework adapter conformance | 36 of 36 |
-| Unit tests | 99, plus 165 LVGL adapter checks |
+| Unit tests | 107, plus 165 LVGL adapter checks |
 | ESP-IDF v6.0 builds | ESP32, ESP32-S3, ESP32-C3, ESP32-P4, no warnings |
 
-Details, including what is skipped and why, are in
-[docs/conformance.md](docs/conformance.md).
+The conformance suites pass both with catalogs parsed into RAM and with the
+compact catalog described under [Memory](#memory). Details, including what
+is skipped and why, are in [docs/conformance.md](docs/conformance.md).
 
 ## What you get
 
@@ -140,13 +141,11 @@ Then, from the LVGL task:
 ```cpp
 #include "a2ui/basic_catalog.h"
 #include "a2ui/message_processor.h"
-#include "a2ui/spec_documents.h"
 #include "a2ui_lvgl/a2ui_lvgl.h"
 
-// The standard catalog, with its functions.
-auto catalog = a2ui::Catalog::from_json(
-    *a2ui::spec::parsed(a2ui::spec::Document::BasicCatalogV1)).value();
-a2ui::basic_catalog::bind_functions(*catalog);
+// The standard catalog, with its functions. Compact (schemas in flash) when
+// CONFIG_A2UI_COMPACT_CATALOG is set; see Memory below.
+auto catalog = a2ui::basic_catalog::load().value();
 
 // Every message for the agent goes out through your transport.
 a2ui::MessageProcessorOptions options;
@@ -217,17 +216,26 @@ on hardware yet.
 
 | What | Heap | Stack |
 |---|---|---|
-| Basic catalog, loaded once | about 220 KB | 5 KB |
+| Basic catalog, compact (schemas in flash) | about 17 KB | 7 KB |
+| Basic catalog, parsed into RAM | about 150 KB | 7 KB |
 | A typical card, with its LVGL widgets | about 80 KB | 9 KB |
 | A message at the default depth limits | | 36 KB |
 
-You need an **ESP32-S3 or ESP32-P4 with PSRAM**. Nearly every allocation is
-small, so ESP-IDF puts it in internal RAM first unless you change
-`CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`. Chips without PSRAM (ESP32-C3, plain
-ESP32 modules) build, but an ESP32-C3 ran out of memory rendering a typical
-card; a compact catalog for them is on the roadmap.
-[docs/porting.md](docs/porting.md#memory-on-esp-idf) explains how to keep
-the libraries in PSRAM and how much stack to give the A2UI task.
+`a2ui::basic_catalog::load()` loads the catalog either way. The **compact
+catalog** keeps the catalog's JSON schemas in flash as constant tables (44 KB)
+and validates against them in place; set `CONFIG_A2UI_COMPACT_CATALOG`
+(menuconfig, "A2UI core") or call `load(true)`. Validation gives the same
+results. With it an ESP32-C3 renders the coffee-order card with about 170 KB
+of heap to spare. Deeply nested cards, such as the 25-level stress test, still
+do not fit on an ESP32-C3: processing a message briefly needs far more heap
+than the result keeps.
+
+On an ESP32-S3 or ESP32-P4 with PSRAM either catalog works. Nearly every
+allocation is small, so ESP-IDF puts it in internal RAM first unless you
+change `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`.
+[docs/porting.md](docs/porting.md#memory-on-esp-idf) explains the compact
+catalog, how to keep the libraries in PSRAM and how much stack to give the
+A2UI task.
 
 ## Limitations
 
@@ -247,7 +255,8 @@ The full list is in [docs/adapter.md](docs/adapter.md#limitations).
 
 1. Publish memory and frame rates measured on real boards.
 2. Run the WebSocket example (`examples/agent_surface`) on a board.
-3. A compact, precompiled basic catalog for chips without PSRAM.
+3. Fit deeper cards on chips without PSRAM: the compact catalog fits the
+   basic catalog, but a 25-level card still runs out of heap on an ESP32-C3.
 
 ## Contributing
 

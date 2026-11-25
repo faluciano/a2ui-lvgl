@@ -1,0 +1,3 @@
+# ESP32-C3: no PSRAM, so measure the compact basic catalog. To measure the
+# Json catalog instead, set CONFIG_A2UI_COMPACT_CATALOG=n (README).
+CONFIG_A2UI_COMPACT_CATALOG=y
