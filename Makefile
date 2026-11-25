@@ -6,6 +6,7 @@
 #   make lvgl-smoke  build LVGL (third_party/lvgl) and run the LVGL adapter tests
 #   make adapter-conformance   run the framework adapter suites against a2ui_lvgl
 #   make renders     render catalogs/basic/v1/examples and test/lvgl/renders to build/renders/*.png
+#   make simulator   build the SDL desktop simulator (needs SDL2) into build/sim/
 #
 # The LVGL targets are part of `all` and `test` when the third_party/lvgl
 # submodule is checked out; the core library and harness never depend on it.
@@ -77,7 +78,7 @@ SUITE_JSON += $(FIXTURE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.
 # Adapter-only suites outside core/.
 SUITE_JSON += build/conformance/adapter/markdown_subset.json
 
-.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders clean
+.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders simulator clean
 
 all: $(BUILD)/libA2uiCore.a $(BUILD)/unit_tests $(BUILD)/conformance suites $(if $(HAVE_LVGL),lvgl)
 
@@ -153,6 +154,58 @@ renders: $(BUILD)/render_sample
 	done
 	@echo "rendered $(words $(EXAMPLES)) examples into build/renders/"
 
+# The SDL desktop simulator (tools/simulator). Not part of `all`: it needs
+# SDL2 and builds its own copy of LVGL, the core and the adapter under
+# build/sim with tools/simulator/lv_conf.h (SDL drivers on) and without
+# sanitizers. Set SDL2_CFLAGS and SDL2_LIBS to use an SDL2 outside the
+# system paths.
+SIM := build/sim
+SIM_OPT ?= -O2 -g
+ifeq ($(origin SDL2_LIBS),undefined)
+SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null || sdl2-config --cflags 2>/dev/null)
+SDL2_LIBS := $(shell pkg-config --libs sdl2 2>/dev/null || sdl2-config --libs 2>/dev/null)
+endif
+SIM_LVGL_INC := -DLV_CONF_INCLUDE_SIMPLE -Itools/simulator -I$(LVGL) -I$(LVGL)/include
+SIM_CXXFLAGS := -std=c++17 $(SIM_OPT) $(WARN) -fno-exceptions -fno-rtti \
+	-Icomponents/a2ui_core/include -Icomponents/a2ui_lvgl/include $(SIM_LVGL_INC)
+SIM_LVGL_OBJS := $(LVGL_SRCS:$(LVGL)/src/%.c=$(SIM)/lvgl/%.o)
+SIM_LIB_OBJS := $(CORE_SRCS:%.cpp=$(SIM)/%.o) $(ADAPTER_SRCS:%.cpp=$(SIM)/%.o)
+SIM_APP_OBJS := $(SIM)/tools/simulator/simulator.o $(SIM)/tools/render_sample/png_writer.o
+
+$(SIM)/lvgl/%.o: $(LVGL)/src/%.c tools/simulator/lv_conf.h
+	@mkdir -p $(dir $@)
+	@$(CC) -std=gnu99 $(SIM_OPT) $(SIM_LVGL_INC) $(SDL2_CFLAGS) -MMD -MP -c $< -o $@
+
+$(SIM)/components/%.o: components/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(SIM_CXXFLAGS) -MMD -MP -c $< -o $@
+
+$(SIM)/tools/%.o: tools/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(SIM_CXXFLAGS) -Itools/render_sample $(SDL2_CFLAGS) -MMD -MP -c $< -o $@
+
+$(SIM)/liblvgl.a: $(SIM_LVGL_OBJS)
+	@rm -f $@
+	ar rcs $@ $^
+
+$(SIM)/libA2uiSim.a: $(SIM_LIB_OBJS)
+	@rm -f $@
+	ar rcs $@ $^
+
+$(SIM)/a2ui_simulator: $(SIM_APP_OBJS) $(SIM)/libA2uiSim.a $(SIM)/liblvgl.a
+	$(CXX) $^ $(SDL2_LIBS) -o $@
+
+ifeq ($(strip $(SDL2_LIBS)),)
+simulator:
+	@echo "simulator: SDL2 not found (install libsdl2-dev, or set SDL2_CFLAGS and SDL2_LIBS)"; exit 1
+else ifeq ($(HAVE_LVGL),)
+simulator:
+	@echo "simulator: $(LVGL) not checked out (git submodule update --init $(LVGL))"; exit 1
+else
+simulator: $(SIM)/a2ui_simulator
+	@echo "built $(SIM)/a2ui_simulator"
+endif
+
 # The libraries use a2ui::Ref (a2ui/ref.h), not std::shared_ptr: on ESP-IDF
 # every std::shared_ptr control block creates a FreeRTOS mutex in internal
 # RAM. User-facing handles stay std::shared_ptr<void>; mark any other
@@ -183,3 +236,4 @@ clean:
 
 -include $(CORE_OBJS:.o=.d) $(HARNESS_OBJS:.o=.d) $(UNIT_OBJS:.o=.d)
 -include $(LVGL_OBJS:.o=.d) $(ADAPTER_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d) $(ADAPTER_CONF_OBJS:.o=.d) $(RENDER_OBJS:.o=.d)
+-include $(SIM_LVGL_OBJS:.o=.d) $(SIM_LIB_OBJS:.o=.d) $(SIM_APP_OBJS:.o=.d)
