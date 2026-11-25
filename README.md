@@ -67,6 +67,21 @@ build/host/render_sample my_surface.json out.png --size 320x240 --dark
 `render_sample` takes any file of A2UI v1.0 messages, so you can check what
 your agent's output looks like before you flash anything.
 
+To click and type as well, build the SDL desktop simulator. It needs SDL2
+(`libsdl2-dev` on Debian and Ubuntu; so far tried on Linux only):
+
+```sh
+make simulator
+build/sim/a2ui_simulator my_surface.json --size 320x240 --dark
+```
+
+It opens a window with the surface. Every message for the agent (actions,
+function calls, errors) is printed to stdout as one JSON object per line.
+With `--stdin`, each line on stdin is a further message from the agent, so
+you can connect it to an agent process with two pipes. For scripted runs
+without a display, use `--exit-after MS`, `--click X,Y`, `--type TEXT` and
+`--screenshot out.png` with `SDL_VIDEODRIVER=dummy`.
+
 ## Use it on an ESP32
 
 Build the example (ESP-IDF 6.0; see [Requirements](#requirements)):
@@ -208,7 +223,6 @@ The full list is in [docs/adapter.md](docs/adapter.md#limitations).
 1. Publish memory and frame rates measured on real boards.
 2. A WebSocket transport and an end-to-end example with a sample agent.
 3. A compact, precompiled basic catalog for chips without PSRAM.
-4. An SDL desktop simulator.
 
 ## Contributing
 
@@ -224,7 +238,7 @@ Bug reports, board test results and pull requests are welcome. Start with
 | `components/a2ui_lvgl` | LVGL adapter. Depends on `a2ui_core` and LVGL. |
 | `examples/basic_surface` | ESP-IDF example app. |
 | `test/` | Unit tests, the conformance harness and the LVGL adapter tests. |
-| `tools/` | Host renderer, table generators and build scripts. |
+| `tools/` | Host renderer, desktop simulator, table generators and build scripts. |
 | `docs/` | Adapter guide, porting notes, conformance details. |
 | `third_party/a2ui` | Upstream A2UI (submodule): specification, catalogs, conformance suites. |
 | `third_party/lvgl` | LVGL v9.6.0 (submodule), used only for host builds. |

@@ -40,6 +40,13 @@ Tracks upstream A2UI at c26be2dd (was 58379ad4).
   one schema". Other formats are still not checked.
 - docs/adapter.md shows how to add bold and italic fonts to the theme.
 - `make renders` also renders the adapter fixtures in `test/lvgl/renders`.
+- `tools/simulator`: an SDL desktop simulator (`make simulator`). It shows
+  A2UI v1.0 surfaces from a message file in a window you can click and type
+  in, prints every message for the agent to stdout as JSON lines, and with
+  `--stdin` reads further agent messages from stdin, one per line. It has
+  `--size` and `--dark` like `render_sample`, plus `--exit-after`, `--click`,
+  `--type` and `--screenshot` for scripted runs without a display
+  (`SDL_VIDEODRIVER=dummy`). It needs SDL2; `make` and `make test` do not.
 
 ## 0.1.0
 
