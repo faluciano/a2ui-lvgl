@@ -163,6 +163,12 @@ directly:
 - `components/a2ui_core/src/**/*.cpp`, include path `components/a2ui_core/include`
 - `components/a2ui_lvgl/src/**/*.cpp`, include path `components/a2ui_lvgl/include`
 
+The WebSocket transport in `examples/agent_surface/components/a2ui_transport_ws` is ESP-IDF
+code, apart from `src/agent_session.cpp`, which needs only `a2ui_core` and a
+function that sends a text frame. On another platform, feed it from your own
+WebSocket client as `test/e2e/agent_e2e.cpp` does (see
+[transport.md](transport.md)).
+
 The `Makefile` does exactly this for the host tests.
 
 ## LVGL configuration

@@ -27,6 +27,8 @@ jobs:
         run: make -j"$(nproc)" test
       - name: Render the upstream examples
         run: make -j"$(nproc)" renders
+      - name: End-to-end test with the sample agent
+        run: make -j"$(nproc)" e2e
       - uses: actions/upload-artifact@v7
         with:
           name: renders

@@ -7,6 +7,7 @@
 #   make adapter-conformance   run the framework adapter suites against a2ui_lvgl
 #   make renders     render catalogs/basic/v1/examples and test/lvgl/renders to build/renders/*.png
 #   make simulator   build the SDL desktop simulator (needs SDL2) into build/sim/
+#   make e2e         run the WebSocket transport against examples/agent_surface/sample_agent.py
 #
 # The LVGL targets are part of `all` and `test` when the third_party/lvgl
 # submodule is checked out; the core library and harness never depend on it.
@@ -60,6 +61,10 @@ SMOKE_OBJS := $(BUILD)/test/lvgl/smoke_test.o $(LVGL_ENV_OBJ)
 ADAPTER_CONF_OBJS := $(BUILD)/test/lvgl/adapter_suite.o $(LVGL_ENV_OBJ) \
 	$(BUILD)/test/harness/harness.o $(BUILD)/test/harness/main.o
 RENDER_OBJS := $(BUILD)/tools/render_sample/render_sample.o $(BUILD)/tools/render_sample/png_writer.o $(LVGL_ENV_OBJ)
+# The end-to-end test: the transport's platform-neutral session, a test
+# WebSocket client and the adapter, against the sample agent (needs uv).
+E2E_OBJS := $(BUILD)/test/e2e/agent_e2e.o $(BUILD)/test/e2e/ws_client.o \
+	$(BUILD)/examples/agent_surface/components/a2ui_transport_ws/src/agent_session.o $(LVGL_ENV_OBJ)
 ADAPTER_SUITES := build/conformance/core/adapter_conformance.json build/conformance/core/accessibility.json \
 	build/conformance/adapter/markdown_subset.json
 EXAMPLES := $(wildcard $(UPSTREAM)/catalogs/basic/v1/examples/*.json)
@@ -69,6 +74,9 @@ EXAMPLES += $(wildcard test/lvgl/renders/*.json)
 $(ADAPTER_OBJS): LIB_CXXFLAGS += -Icomponents/a2ui_lvgl/include $(LVGL_INC)
 $(BUILD)/test/lvgl/%.o: TEST_CXXFLAGS += -Icomponents/a2ui_lvgl/include -Icomponents/a2ui_lvgl/src $(LVGL_INC)
 $(BUILD)/tools/%.o: TEST_CXXFLAGS += -Icomponents/a2ui_lvgl/include -Itest/lvgl $(LVGL_INC)
+TRANSPORT := examples/agent_surface/components/a2ui_transport_ws
+$(BUILD)/test/e2e/%.o: TEST_CXXFLAGS += -Icomponents/a2ui_lvgl/include -I$(TRANSPORT)/include \
+	-Itest/lvgl $(LVGL_INC)
 
 SUITE_YAML := $(wildcard $(UPSTREAM)/conformance/core/*.yaml)
 SUITE_JSON := $(SUITE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.json)
@@ -78,7 +86,7 @@ SUITE_JSON += $(FIXTURE_YAML:$(UPSTREAM)/conformance/%.yaml=build/conformance/%.
 # Adapter-only suites outside core/.
 SUITE_JSON += build/conformance/adapter/markdown_subset.json
 
-.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders simulator clean
+.PHONY: all test check-refs unit conformance suites lvgl lvgl-smoke adapter-conformance renders simulator e2e clean
 
 all: $(BUILD)/libA2uiCore.a $(BUILD)/unit_tests $(BUILD)/conformance suites $(if $(HAVE_LVGL),lvgl)
 
@@ -93,6 +101,11 @@ $(BUILD)/test/%.o: test/%.cpp
 $(BUILD)/tools/%.o: tools/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(TEST_CXXFLAGS) -MMD -MP -c $< -o $@
+
+# The transport's session code builds like the libraries (no exceptions, no RTTI).
+$(BUILD)/$(TRANSPORT)/%.o: $(TRANSPORT)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(LIB_CXXFLAGS) -I$(TRANSPORT)/include -MMD -MP -c $< -o $@
 
 $(BUILD)/lvgl/%.o: $(LVGL)/src/%.c
 	@mkdir -p $(dir $@)
@@ -113,6 +126,9 @@ $(BUILD)/adapter_conformance: $(ADAPTER_CONF_OBJS) $(BUILD)/libA2uiLvgl.a $(BUIL
 	$(CXX) $^ $(LDFLAGS) -o $@
 
 $(BUILD)/render_sample: $(RENDER_OBJS) $(BUILD)/libA2uiLvgl.a $(BUILD)/libA2uiCore.a $(BUILD)/liblvgl.a
+	$(CXX) $^ $(LDFLAGS) -o $@
+
+$(BUILD)/agent_e2e: $(E2E_OBJS) $(BUILD)/libA2uiLvgl.a $(BUILD)/libA2uiCore.a $(BUILD)/liblvgl.a
 	$(CXX) $^ $(LDFLAGS) -o $@
 
 $(BUILD)/libA2uiCore.a: $(CORE_OBJS)
@@ -206,6 +222,9 @@ simulator: $(SIM)/a2ui_simulator
 	@echo "built $(SIM)/a2ui_simulator"
 endif
 
+e2e: $(BUILD)/agent_e2e
+	UV=$(UV) test/e2e/run.sh $(BUILD)/agent_e2e
+
 # The libraries use a2ui::Ref (a2ui/ref.h), not std::shared_ptr: on ESP-IDF
 # every std::shared_ptr control block creates a FreeRTOS mutex in internal
 # RAM. User-facing handles stay std::shared_ptr<void>; mark any other
@@ -237,3 +256,4 @@ clean:
 -include $(CORE_OBJS:.o=.d) $(HARNESS_OBJS:.o=.d) $(UNIT_OBJS:.o=.d)
 -include $(LVGL_OBJS:.o=.d) $(ADAPTER_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d) $(ADAPTER_CONF_OBJS:.o=.d) $(RENDER_OBJS:.o=.d)
 -include $(SIM_LVGL_OBJS:.o=.d) $(SIM_LIB_OBJS:.o=.d) $(SIM_APP_OBJS:.o=.d)
+-include $(E2E_OBJS:.o=.d)

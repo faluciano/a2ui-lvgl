@@ -47,6 +47,9 @@ Details, including what is skipped and why, are in
   accessibility. You can replace any component with your own widget.
 - **`examples/basic_surface`**: an ESP-IDF app for SPI displays (ST7789,
   ILI9341) or no display at all.
+- **`examples/agent_surface`**: the same over Wi-Fi, talking to a sample agent
+  (`sample_agent.py`) that you run on your computer. Its WebSocket transport
+  (`a2ui_transport_ws`, with reconnects) is a component you can copy.
 
 Both libraries build without exceptions or RTTI and run on a single thread,
 the LVGL task.
@@ -62,6 +65,7 @@ cd a2ui-lvgl
 make test      # unit tests and the upstream conformance suites
 make renders   # draws every upstream example into build/renders/*.png
 build/host/render_sample my_surface.json out.png --size 320x240 --dark
+make e2e       # a host renderer against the sample WebSocket agent
 ```
 
 `render_sample` takes any file of A2UI v1.0 messages, so you can check what
@@ -81,6 +85,26 @@ With `--stdin`, each line on stdin is a further message from the agent, so
 you can connect it to an agent process with two pipes. For scripted runs
 without a display, use `--exit-after MS`, `--click X,Y`, `--type TEXT` and
 `--screenshot out.png` with `SDL_VIDEODRIVER=dummy`.
+
+## Talk to an agent
+
+`examples/agent_surface` joins Wi-Fi, connects to an agent over a WebSocket,
+draws what it sends and sends the user's actions back. To try it, run the
+sample agent on your computer, then build the example:
+
+```sh
+uv run examples/agent_surface/sample_agent.py   # prints ws://<your address>:8765
+cd examples/agent_surface
+idf.py set-target esp32s3                       # or esp32p4
+idf.py menuconfig   # "A2UI agent surface example": Wi-Fi, agent URI, display
+idf.py build flash monitor
+```
+
+The sample agent answers with fixed rules and shows where a language model
+would go. [docs/transport.md](docs/transport.md) covers the transport, the
+frames on the wire and what happens when the connection drops. It builds for
+the ESP32-S3 and ESP32-P4 and passes the host end-to-end test, but has not
+run on a board yet.
 
 ## Use it on an ESP32
 
@@ -153,8 +177,9 @@ components, the theme, the image loader and the other hooks.
 ### What you provide
 
 - **The connection to the agent.** The library takes and returns JSON text.
-  WebSocket, HTTP streaming, MQTT, BLE or a serial port all work. A ready-made
-  WebSocket transport is on the [roadmap](#roadmap).
+  WebSocket, HTTP streaming, MQTT, BLE or a serial port all work. For a
+  WebSocket on ESP-IDF, the example's `a2ui_transport_ws` component does it
+  for you; see [docs/transport.md](docs/transport.md).
 - **An image loader**, if you want `Image` components to show pixels.
 - **Fonts**, if you want bold, italic or glyphs beyond the built-in Montserrat.
 
@@ -221,7 +246,7 @@ The full list is in [docs/adapter.md](docs/adapter.md#limitations).
 ## Roadmap
 
 1. Publish memory and frame rates measured on real boards.
-2. A WebSocket transport and an end-to-end example with a sample agent.
+2. Run the WebSocket example (`examples/agent_surface`) on a board.
 3. A compact, precompiled basic catalog for chips without PSRAM.
 
 ## Contributing
@@ -236,10 +261,11 @@ Bug reports, board test results and pull requests are welcome. Start with
 |---|---|
 | `components/a2ui_core` | Protocol core. No dependencies. |
 | `components/a2ui_lvgl` | LVGL adapter. Depends on `a2ui_core` and LVGL. |
-| `examples/basic_surface` | ESP-IDF example app. |
-| `test/` | Unit tests, the conformance harness and the LVGL adapter tests. |
+| `examples/basic_surface` | ESP-IDF example app with a built-in surface. |
+| `examples/agent_surface` | ESP-IDF example app that talks to an agent over Wi-Fi, its WebSocket transport component, and the sample agent. |
+| `test/` | Unit tests, the conformance harness, the LVGL adapter tests and the end-to-end test. |
 | `tools/` | Host renderer, desktop simulator, table generators and build scripts. |
-| `docs/` | Adapter guide, porting notes, conformance details. |
+| `docs/` | Adapter guide, transport, porting notes, conformance details. |
 | `third_party/a2ui` | Upstream A2UI (submodule): specification, catalogs, conformance suites. |
 | `third_party/lvgl` | LVGL v9.6.0 (submodule), used only for host builds. |
 
